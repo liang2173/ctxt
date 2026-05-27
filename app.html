@@ -1,0 +1,1355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>刷题助手 — 沉浸式记忆刷题系统</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #f0f2f5; --card: #fff; --border: #e5e7eb;
+  --primary: #4f46e5; --primary-hover: #4338ca; --primary-light: #eef2ff;
+  --success: #10b981; --success-light: #d1fae5;
+  --danger: #ef4444; --danger-light: #fee2e2;
+  --warning: #f59e0b; --warning-light: #fef3c7;
+  --text: #1f2937; --text-secondary: #6b7280; --text-muted: #9ca3af;
+  --radius: 12px; --radius-sm: 8px; --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md: 0 4px 6px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.06);
+  --shadow-lg: 0 10px 25px rgba(0,0,0,.08), 0 4px 10px rgba(0,0,0,.05);
+}
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; }
+
+/* Top Bar */
+.topbar { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 24px; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow); }
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.topbar-logo { font-size: 1.25rem; font-weight: 700; color: var(--primary); }
+.topbar-center { flex: 1; max-width: 480px; margin: 0 32px; }
+.progress-wrap { display: flex; align-items: center; gap: 12px; }
+.progress-bar { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--primary); border-radius: 4px; transition: width .5s ease; }
+.progress-text { font-size: .875rem; color: var(--text-secondary); white-space: nowrap; min-width: 70px; text-align: right; }
+.topbar-right { display: flex; align-items: center; gap: 16px; }
+.topbar-stat { text-align: center; }
+.topbar-stat .num { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+.topbar-stat .lbl { font-size: .7rem; color: var(--text-muted); }
+
+/* Layout */
+.app-body { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 4px; background: var(--card); border-radius: var(--radius); padding: 4px; margin-bottom: 24px; box-shadow: var(--shadow); }
+.tab-btn { flex: 1; padding: 10px 16px; border: none; background: none; border-radius: var(--radius-sm); font-size: .9rem; cursor: pointer; color: var(--text-secondary); transition: all .2s; font-weight: 500; }
+.tab-btn:hover { color: var(--text); background: var(--bg); }
+.tab-btn.active { background: var(--primary); color: #fff; }
+
+/* Cards */
+.card { background: var(--card); border-radius: var(--radius); padding: 32px; box-shadow: var(--shadow); margin-bottom: 20px; }
+.card-header { margin-bottom: 20px; }
+.card-title { font-size: 1.1rem; font-weight: 600; }
+
+/* Question Area */
+.question-type-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: .75rem; font-weight: 600; letter-spacing: .5px; margin-bottom: 12px; }
+.badge-choice { background: #dbeafe; color: #1e40af; }
+.badge-fill { background: var(--warning-light); color: #92400e; }
+.badge-short { background: var(--success-light); color: #065f46; }
+.question-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.question-tag { font-size: .7rem; padding: 2px 8px; border-radius: 4px; background: var(--bg); color: var(--text-muted); }
+.question-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.question-level { font-size: .8rem; color: var(--text-muted); }
+.question-text { font-size: 1.2rem; font-weight: 600; line-height: 1.8; margin-bottom: 24px; color: var(--text); }
+
+/* Options */
+.options-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
+.option-btn { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border: 2px solid var(--border); border-radius: var(--radius-sm); background: var(--card); cursor: pointer; font-size: 1rem; transition: all .15s; text-align: left; color: var(--text); }
+.option-btn:hover { border-color: var(--primary); background: var(--primary-light); }
+.option-btn .opt-letter { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--bg); font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+.option-btn.correct { border-color: var(--success); background: var(--success-light); }
+.option-btn.correct .opt-letter { background: var(--success); color: #fff; }
+.option-btn.wrong { border-color: var(--danger); background: var(--danger-light); }
+.option-btn.wrong .opt-letter { background: var(--danger); color: #fff; }
+.option-btn:disabled { pointer-events: none; opacity: .85; }
+
+/* Input */
+.input-wrap { margin-bottom: 20px; }
+.input-wrap input, .input-wrap textarea { width: 100%; padding: 14px 18px; border: 2px solid var(--border); border-radius: var(--radius-sm); font-size: 1rem; font-family: inherit; transition: border-color .15s; outline: none; }
+.input-wrap input:focus, .input-wrap textarea:focus { border-color: var(--primary); }
+.input-wrap textarea { min-height: 120px; resize: vertical; }
+
+/* Buttons */
+.btn { padding: 10px 24px; border: none; border-radius: var(--radius-sm); font-size: .9rem; font-weight: 600; cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 6px; }
+.btn:disabled { opacity: .5; pointer-events: none; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-success { background: var(--success); color: #fff; }
+.btn-success:hover { background: #059669; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { background: #dc2626; }
+.btn-ghost { background: none; color: var(--text-secondary); }
+.btn-ghost:hover { background: var(--bg); }
+.btn-sm { padding: 6px 14px; font-size: .8rem; }
+.btn-lg { padding: 14px 32px; font-size: 1rem; }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+
+/* Feedback */
+.feedback { padding: 16px; border-radius: var(--radius-sm); margin: 16px 0; font-weight: 500; display: none; }
+.feedback.show { display: block; }
+.feedback.correct { background: var(--success-light); color: #065f46; border: 1px solid #a7f3d0; }
+.feedback.wrong { background: var(--danger-light); color: #991b1b; border: 1px solid #fecaca; }
+.feedback .explanation { margin-top: 8px; font-weight: 400; font-size: .9rem; opacity: .85; }
+
+/* Self-assessment */
+.self-assess { display: none; margin-top: 16px; }
+.self-assess.show { display: block; }
+.self-assess .answer-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+@media (max-width: 500px) { .self-assess .answer-compare { grid-template-columns: 1fr; } }
+.answer-box { padding: 16px; border-radius: var(--radius-sm); border: 2px solid var(--border); }
+.answer-box .label { font-size: .75rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+.answer-box .content { font-size: .95rem; line-height: 1.6; }
+
+/* Celebration overlay */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.overlay-card { background: var(--card); border-radius: var(--radius); padding: 48px; text-align: center; max-width: 420px; box-shadow: var(--shadow-lg); }
+.overlay-card h2 { font-size: 1.8rem; margin-bottom: 12px; }
+.overlay-card p { color: var(--text-secondary); margin-bottom: 24px; }
+.overlay-emoji { font-size: 4rem; margin-bottom: 16px; }
+
+/* Import area */
+.import-section { background: var(--card); border-radius: var(--radius); padding: 24px; margin-bottom: 20px; box-shadow: var(--shadow); }
+.import-section h3 { font-size: 1rem; margin-bottom: 16px; }
+.file-drop { border: 2px dashed var(--border); border-radius: var(--radius-sm); padding: 32px 24px; text-align: center; cursor: pointer; transition: all .2s; margin-bottom: 16px; }
+.file-drop:hover, .file-drop.drag-over { border-color: var(--primary); background: var(--primary-light); }
+.file-drop p { color: var(--text-secondary); font-size: .9rem; }
+.file-drop .icon { font-size: 2rem; margin-bottom: 8px; }
+.import-or { text-align: center; color: var(--text-muted); font-size: .8rem; margin: 16px 0; position: relative; }
+.import-or::before, .import-or::after { content: ''; position: absolute; top: 50%; width: 40%; height: 1px; background: var(--border); }
+.import-or::before { left: 0; } .import-or::after { right: 0; }
+
+/* KP list */
+.kp-list { display: flex; flex-direction: column; gap: 8px; max-height: 500px; overflow-y: auto; }
+.kp-item { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; background: var(--bg); border-radius: var(--radius-sm); gap: 12px; }
+.kp-item .kp-info { flex: 1; min-width: 0; }
+.kp-item .kp-content { font-weight: 500; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kp-item .kp-meta { font-size: .75rem; color: var(--text-muted); margin-top: 2px; }
+.kp-item.killed { opacity: .5; }
+.level-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+.level-choice { background: #93c5fd; }
+.level-fill { background: #fcd34d; }
+.level-short { background: #6ee7b7; }
+.level-mastered { background: var(--success); }
+
+/* Settings */
+.setting-row { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid var(--border); }
+.setting-row:last-child { border-bottom: none; }
+.setting-label { font-weight: 500; }
+.setting-desc { font-size: .8rem; color: var(--text-muted); margin-top: 2px; }
+
+/* Loading spinner */
+.spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Toast */
+.toast-container { position: fixed; top: 72px; right: 16px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+.toast { padding: 12px 20px; border-radius: var(--radius-sm); font-size: .9rem; font-weight: 500; box-shadow: var(--shadow-md); animation: toastIn .3s ease; max-width: 360px; }
+.toast.success { background: var(--success); color: #fff; }
+.toast.error { background: var(--danger); color: #fff; }
+.toast.info { background: var(--primary); color: #fff; }
+@keyframes toastIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* Confetti */
+.confetti-piece { position: fixed; width: 10px; height: 10px; top: -20px; z-index: 1001; pointer-events: none; animation: confetti-fall linear forwards; }
+@keyframes confetti-fall { 0% { transform: translateY(0) rotate(0deg); opacity: 1; } 100% { transform: translateY(105vh) rotate(720deg); opacity: 0; } }
+
+/* Undo bar */
+.undo-bar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--text); color: #fff; padding: 10px 20px; border-radius: 24px; font-size: .85rem; display: flex; align-items: center; gap: 12px; z-index: 500; box-shadow: var(--shadow-lg); animation: slideUp .3s ease; }
+.undo-bar .btn { padding: 4px 12px; font-size: .8rem; }
+@keyframes slideUp { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+
+/* Responsive */
+@media (max-width: 600px) {
+  .topbar { padding: 0 12px; height: 50px; }
+  .topbar-center { display: none; }
+  .topbar-stat .num { font-size: .9rem; }
+  .card { padding: 20px; }
+  .question-text { font-size: 1.05rem; }
+  .tabs { margin-bottom: 16px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-logo">🧠 刷题助手</span>
+  </div>
+  <div class="topbar-center">
+    <div class="progress-wrap">
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <span class="progress-text" id="progressText">0/0</span>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="topbar-stat"><div class="num" id="todayCount">0</div><div class="lbl">今日已刷</div></div>
+    <div class="topbar-stat"><div class="num" id="accuracyVal">-</div><div class="lbl">正确率</div></div>
+  </div>
+</div>
+
+<div class="app-body">
+
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab-btn active" data-tab="study">📝 刷题</button>
+  <button class="tab-btn" data-tab="bank">📚 题库</button>
+  <button class="tab-btn" data-tab="settings">⚙️ 设置</button>
+</div>
+
+<!-- Study View -->
+<div id="view-study" class="view">
+  <!-- No questions state -->
+  <div class="card" id="emptyState" style="text-align:center;">
+    <div style="font-size:3rem;margin-bottom:12px;">📖</div>
+    <h2 style="margin-bottom:8px;">还没有题目</h2>
+    <p style="color:var(--text-secondary);margin-bottom:20px;">上传知识点文档或粘贴文本，让 AI 帮你生成题目</p>
+    <button class="btn btn-primary btn-lg" onclick="switchTab('bank')">去导入题目</button>
+  </div>
+
+  <!-- Question card -->
+  <div class="card" id="questionCard" style="display:none;">
+    <div class="question-meta">
+      <span class="question-type-badge" id="qBadge"></span>
+      <span class="question-level" id="qLevel"></span>
+    </div>
+    <div class="question-tags" id="qTags"></div>
+    <div class="question-text" id="qText"></div>
+
+    <!-- Choice options -->
+    <div class="options-list" id="optionsList"></div>
+
+    <!-- Fill/Short input -->
+    <div class="input-wrap" id="textInputWrap" style="display:none;">
+      <input type="text" id="textInput" placeholder="输入答案..." autocomplete="off">
+    </div>
+    <div class="input-wrap" id="textareaInputWrap" style="display:none;">
+      <textarea id="textareaInput" placeholder="请回忆并输入相关内容..."></textarea>
+    </div>
+    <button class="btn btn-primary" id="submitBtn" style="display:none;" onclick="submitAnswer()">提交答案</button>
+
+    <!-- Feedback -->
+    <div class="feedback" id="feedback"></div>
+
+    <!-- Self-assessment for short answer -->
+    <div class="self-assess" id="selfAssess">
+      <div class="answer-compare">
+        <div class="answer-box"><div class="label">你的答案</div><div class="content" id="userAnswerDisplay"></div></div>
+        <div class="answer-box"><div class="label">标准答案</div><div class="content" id="modelAnswerDisplay"></div></div>
+      </div>
+      <p style="margin-bottom:12px;font-weight:500;">你的答案是否正确？</p>
+      <div class="btn-row">
+        <button class="btn btn-success" onclick="selfAssess(true)">✓ 答对了</button>
+        <button class="btn btn-danger" onclick="selfAssess(false)">✗ 没答对</button>
+      </div>
+    </div>
+
+    <!-- Post-answer actions -->
+    <div class="btn-row" id="postActions" style="display:none;">
+      <button class="btn btn-lg btn-primary" id="nextBtn" onclick="nextQuestion()">下一题 →</button>
+      <button class="btn btn-ghost" onclick="killCurrent()">🔪 斩杀</button>
+    </div>
+  </div>
+
+  <!-- All done state -->
+  <div class="card" id="doneState" style="display:none;text-align:center;">
+    <div style="font-size:4rem;margin-bottom:12px;">🎉</div>
+    <h2>全部掌握！</h2>
+    <p style="color:var(--text-secondary);">所有知识点都已刷完</p>
+  </div>
+</div>
+
+<!-- Bank View -->
+<div id="view-bank" class="view" style="display:none;">
+
+  <!-- AI Import -->
+  <div class="import-section">
+    <h3>🤖 AI 智能导入（推荐）</h3>
+    <p style="color:var(--text-secondary);font-size:.85rem;margin-bottom:12px;">上传 .docx 或 .txt 文档，AI 会自动拆解知识点并生成选择题、填空题、简答题</p>
+    <div class="file-drop" id="fileDrop">
+      <div class="icon">📁</div>
+      <p>点击上传或拖拽文件到此处</p>
+      <p style="font-size:.75rem;color:var(--text-muted);">支持 .docx / .txt</p>
+      <input type="file" id="fileInput" accept=".docx,.txt" style="display:none;">
+    </div>
+    <div class="import-or">或者粘贴文本</div>
+    <div class="input-wrap">
+      <textarea id="pasteText" placeholder="直接粘贴知识点文本...&#10;&#10;例如：&#10;拉采尔是近代人文地理学的重要奠基人之一，他提出了...&#10;赫特纳是区域地理学派的代表人物，主张..."></textarea>
+    </div>
+    <div id="aiStatus" style="margin-bottom:12px;font-size:.85rem;"></div>
+    <button class="btn btn-primary btn-lg" id="aiGenerateBtn" onclick="aiGenerate()">🚀 AI 生成题目</button>
+  </div>
+
+  <!-- Manual Import -->
+  <div class="import-section">
+    <h3>✏️ 手动添加题目</h3>
+    <p style="color:var(--text-secondary);font-size:.85rem;margin-bottom:12px;">适用于已有格式化题目的情况。支持格式：<code>题目|答案</code> 或 <code>题目=答案</code>，每行一题</p>
+    <div class="input-wrap">
+      <textarea id="manualText" placeholder="中国的首都是哪里？|北京&#10;1+1等于几？=2&#10;以下哪个是编程语言？&#10;A. Java&#10;B. 英语&#10;C. 数学&#10;D. 物理&#10;答案：A"></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="manualImport()">导入题目</button>
+  </div>
+
+  <!-- Knowledge Point List -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 id="kpListTitle">知识点列表</h3>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-sm btn-ghost" onclick="exportData()">导出数据</button>
+        <button class="btn btn-sm btn-danger" onclick="clearAll()">清空全部</button>
+      </div>
+    </div>
+    <div class="kp-list" id="kpList">
+      <p style="text-align:center;color:var(--text-muted);padding:24px;">暂无知识点</p>
+    </div>
+  </div>
+</div>
+
+<!-- Settings View -->
+<div id="view-settings" class="view" style="display:none;">
+  <div class="card">
+    <h3 style="margin-bottom:16px;">API 设置</h3>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">DeepSeek API Key</div>
+        <div class="setting-desc">Key 仅存储在你的浏览器本地，不会上传到任何服务器</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="password" id="apiKeyInput" placeholder="sk-..." style="width:240px;padding:8px 12px;border:2px solid var(--border);border-radius:var(--radius-sm);font-size:.9rem;outline:none;">
+        <button class="btn btn-sm btn-primary" onclick="saveApiKey()">保存</button>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">AI 模型</div>
+      </div>
+      <select id="modelSelect" style="padding:8px 12px;border:2px solid var(--border);border-radius:var(--radius-sm);font-size:.9rem;">
+        <option value="deepseek-chat">deepseek-chat</option>
+      </select>
+    </div>
+  </div>
+  <div class="card">
+    <h3 style="margin-bottom:16px;">数据管理</h3>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="exportData()">导出题库 (JSON)</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('importFileInput').click()">导入题库 (JSON)</button>
+      <input type="file" id="importFileInput" accept=".json" style="display:none;" onchange="importData(event)">
+      <button class="btn btn-danger" onclick="clearAll()">清空所有数据</button>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Undo kill bar -->
+<div class="undo-bar" id="undoBar" style="display:none;">
+  <span>🔪 已斩杀</span>
+  <button class="btn btn-sm" style="background:#fff;color:var(--text);" onclick="undoKill()">↩ 撤销</button>
+</div>
+
+<script>
+// ──────────────────────────────────────
+// 1. UTILITY
+// ──────────────────────────────────────
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// ──────────────────────────────────────
+// 2. DOCX PARSER (minimal, zero-dependency)
+// ──────────────────────────────────────
+const DocxParser = {
+  async extractText(file) {
+    const buf = await file.arrayBuffer();
+    const view = new DataView(buf);
+    const eocdOff = (() => {
+      const len = view.byteLength;
+      for (let i = len - 22; i >= Math.max(0, len - 65557); i--) {
+        if (view.getUint32(i, true) === 0x06054b50) return i;
+      }
+      return -1;
+    })();
+    if (eocdOff === -1) throw new Error('无法解析文件：不是有效的 ZIP/DOCX 格式');
+
+    const cdOff = view.getUint32(eocdOff + 16, true);
+    const cdSize = view.getUint32(eocdOff + 12, true);
+    let docOff, docCSize, docMethod;
+    let pos = cdOff;
+    const cdEnd = cdOff + cdSize;
+    while (pos < cdEnd) {
+      if (view.getUint32(pos, true) !== 0x02014b50) break;
+      const method = view.getUint16(pos + 10, true);
+      const cSize = view.getUint32(pos + 20, true);
+      const fnLen = view.getUint16(pos + 28, true);
+      const extraLen = view.getUint16(pos + 30, true);
+      const commentLen = view.getUint16(pos + 32, true);
+      const localOff = view.getUint32(pos + 42, true);
+      const fnBytes = new Uint8Array(buf, pos + 46, fnLen);
+      const fn = new TextDecoder().decode(fnBytes);
+      if (fn === 'word/document.xml') {
+        let lp = localOff;
+        const lfnLen = view.getUint16(lp + 26, true);
+        const lexLen = view.getUint16(lp + 28, true);
+        docOff = lp + 30 + lfnLen + lexLen;
+        docCSize = cSize;
+        docMethod = method;
+        break;
+      }
+      pos += 46 + fnLen + extraLen + commentLen;
+    }
+    if (docOff === undefined) throw new Error('DOCX 中未找到 word/document.xml');
+
+    const compData = new Uint8Array(buf, docOff, docCSize);
+    let xmlStr;
+    if (docMethod === 8) {
+      const ds = new DecompressionStream('deflate-raw');
+      const writer = ds.writable.getWriter();
+      writer.write(compData);
+      writer.close();
+      const reader = ds.readable.getReader();
+      const chunks = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      const total = chunks.reduce((s, c) => s + c.length, 0);
+      const decomp = new Uint8Array(total);
+      let o = 0;
+      for (const c of chunks) { decomp.set(c, o); o += c.length; }
+      xmlStr = new TextDecoder().decode(decomp);
+    } else {
+      xmlStr = new TextDecoder().decode(compData);
+    }
+
+    const xmlDoc = new DOMParser().parseFromString(xmlStr, 'text/xml');
+    const NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const paras = xmlDoc.getElementsByTagNameNS(NS, 'p');
+    const result = [];
+    for (const p of paras) {
+      const tNodes = p.getElementsByTagNameNS(NS, 't');
+      let txt = '';
+      for (const t of tNodes) { txt += t.textContent || ''; }
+      if (txt.trim()) result.push(txt.trim());
+    }
+    return result.join('\n\n');
+  }
+};
+
+// ──────────────────────────────────────
+// 3. DATA STORE
+// ──────────────────────────────────────
+const STORE_KEY = 'quiz_app_data';
+const SETTINGS_KEY = 'quiz_app_settings';
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    return raw ? JSON.parse(raw) : { kps: [], stats: { today: '', count: 0, correct: 0, attempts: 0 }, coolingPool: [], lastKilled: null };
+  } catch { return { kps: [], stats: { today: '', count: 0, correct: 0, attempts: 0 }, coolingPool: [], lastKilled: null }; }
+}
+
+function saveData(d) { try { localStorage.setItem(STORE_KEY, JSON.stringify(d)); } catch(e) { toast('存储空间不足，请清理一些数据', 'error'); } }
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    return raw ? JSON.parse(raw) : { apiKey: '', model: 'deepseek-chat' };
+  } catch { return { apiKey: '', model: 'deepseek-chat' }; }
+}
+
+function saveSettings(s) { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); }
+
+let data = loadData();
+let settings = loadSettings();
+
+// Reset today stats if new day
+const todayStr = new Date().toDateString();
+if (data.stats.today !== todayStr) { data.stats.today = todayStr; data.stats.count = 0; }
+
+// ──────────────────────────────────────
+// 4. QUIZ ENGINE
+// ──────────────────────────────────────
+const COOLING_SIZE = 15;
+const STREAK_TO_ADVANCE = 2;
+
+function getLevelOrder(kp) {
+  const levels = [];
+  if (kp.questions.choice && kp.questions.choice.length > 0) levels.push('choice');
+  if (kp.questions.fill_blank && kp.questions.fill_blank.length > 0) levels.push('fill_blank');
+  if (kp.questions.short_answer && kp.questions.short_answer.length > 0) levels.push('short_answer');
+  return levels;
+}
+
+function getNextLevel(kp) {
+  const order = getLevelOrder(kp);
+  const idx = order.indexOf(kp.currentLevel);
+  if (idx === -1 || idx === order.length - 1) return null;
+  return order[idx + 1];
+}
+
+function selectNextQuestion() {
+  const available = data.kps.filter(kp => !kp.killed && kp.currentLevel !== 'mastered');
+  if (available.length === 0) return null;
+
+  let candidates = [];
+  for (const kp of available) {
+    const qs = kp.questions[kp.currentLevel];
+    if (!qs || qs.length === 0) { candidates.push({ kp, question: null }); continue; }
+    for (const q of qs) {
+      if ((q.streak || 0) >= STREAK_TO_ADVANCE) continue;
+      if (!data.coolingPool.includes(q.id)) {
+        candidates.push({ kp, question: q });
+      }
+    }
+  }
+
+  // If no candidates (all in cooling pool or done), relax cooling pool
+  if (candidates.length === 0) {
+    for (const kp of available) {
+      const qs = kp.questions[kp.currentLevel];
+      if (!qs || qs.length === 0) continue;
+      for (const q of qs) {
+        if ((q.streak || 0) >= STREAK_TO_ADVANCE) continue;
+        candidates.push({ kp, question: q });
+      }
+    }
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Weighted random
+  const totalW = candidates.reduce((s, c) => s + (c.kp.weight || 100), 0);
+  let r = Math.random() * totalW;
+  for (const c of candidates) {
+    r -= (c.kp.weight || 100);
+    if (r <= 0) {
+      if (c.question) {
+        data.coolingPool.push(c.question.id);
+        while (data.coolingPool.length > COOLING_SIZE) data.coolingPool.shift();
+      }
+      return c;
+    }
+  }
+  const fallback = candidates[candidates.length - 1];
+  if (fallback.question) {
+    data.coolingPool.push(fallback.question.id);
+    while (data.coolingPool.length > COOLING_SIZE) data.coolingPool.shift();
+  }
+  return fallback;
+}
+
+function processAnswer(isCorrect) {
+  const kp = data.currentKP;
+  const q = data.currentQuestion;
+  if (!kp || !q) return;
+
+  data.stats.count++;
+  data.stats.attempts++;
+  if (isCorrect) {
+    data.stats.correct++;
+    q.streak = (q.streak || 0) + 1;
+    kp.weight = Math.max(20, (kp.weight || 100) - 30);
+    // Check if ALL questions at current level have reached the threshold
+    const allQs = kp.questions[kp.currentLevel] || [];
+    const allDone = allQs.length > 0 && allQs.every(q => (q.streak || 0) >= STREAK_TO_ADVANCE);
+    if (allDone) {
+      // Reset streaks for current level questions before advancing
+      allQs.forEach(q => { q.streak = 0; });
+      const nextLvl = getNextLevel(kp);
+      if (nextLvl) {
+        kp.currentLevel = nextLvl;
+        toast(`知识点晋级到${levelLabel(nextLvl)}！`, 'success');
+      } else {
+        kp.currentLevel = 'mastered';
+        toast('🎉 知识点已掌握！', 'success');
+      }
+    }
+  } else {
+    q.streak = 0;
+    kp.weight = Math.min(500, (kp.weight || 100) + 50);
+    if (kp._wasCorrectBefore) {
+      kp.weight = Math.min(500, (kp.weight || 100) + 50);
+    }
+  }
+  kp._wasCorrectBefore = kp._wasCorrectBefore || isCorrect;
+  saveData(data);
+}
+
+function killKP(kpId) {
+  const kp = data.kps.find(k => k.id === kpId);
+  if (!kp || kp.killed) return;
+  kp.killed = true;
+  kp.killedAt = Date.now();
+  data.lastKilled = kpId;
+  saveData(data);
+  showUndoBar();
+}
+
+function unkillKP(kpId) {
+  const kp = data.kps.find(k => k.id === kpId);
+  if (!kp || !kp.killed) return;
+  kp.killed = false;
+  kp.killedAt = null;
+  saveData(data);
+  renderBank();
+  toast('已恢复知识点', 'info');
+}
+
+function undoKill() {
+  if (!data.lastKilled) return false;
+  const kp = data.kps.find(k => k.id === data.lastKilled);
+  if (!kp || !kp.killed) return false;
+  if (Date.now() - kp.killedAt > 15000) { toast('撤销时间已过（15秒）', 'error'); return false; }
+  kp.killed = false;
+  kp.killedAt = null;
+  data.lastKilled = null;
+  saveData(data);
+  hideUndoBar();
+  renderBank();
+  toast('已撤销斩杀', 'info');
+  return true;
+}
+
+function levelLabel(lvl) {
+  const m = { choice: '选择题', fill_blank: '填空题', short_answer: '简答题', mastered: '已掌握' };
+  return m[lvl] || lvl;
+}
+
+function questionTypeLabel(type) {
+  const m = { choice: '选择题', fill_blank: '填空题', short_answer: '简答题' };
+  return m[type] || type;
+}
+
+function badgeClass(type) {
+  const m = { choice: 'badge-choice', fill_blank: 'badge-fill', short_answer: 'badge-short' };
+  return m[type] || '';
+}
+
+// ──────────────────────────────────────
+// 5. AI GENERATOR (DeepSeek API)
+// ──────────────────────────────────────
+const SYSTEM_PROMPT = `你是一个记忆辅助刷题系统的题目生成器。你的任务是将用户提供的知识点文本拆解并生成多层次的记忆辅助题目。
+
+## 核心原则：饱和式记忆
+- 目标不是考察，而是帮助用户建立牢固的神经连接——每次答题（无论对错）都在加深记忆
+- 同一个知识点从不同角度设问，让用户的大脑从多个通路强化同一信息
+- 选择题干扰项必须来自同领域的其他真实概念——选错的同时也认识了干扰项的概念
+- 正确选项不做陷阱式伪装，干扰项不做恶意混淆
+
+## 出题数量：按知识点篇幅决定
+- 一句话的定义/事实（<40字）：每个阶段1道题即可，无需多角度
+- 中等段落（40-150字）：每个阶段2道题，从不同角度设问
+- 长段落/复合概念（>150字）：每个阶段3道题，覆盖定义、细节、关联等不同角度
+
+## 多角度设问策略（按内容类型选择合适角度）
+定义类：正向（"什么是X"）、反向（"Y这种...被称为什么"）
+人物/著作类：人物→贡献、贡献→人物、人物→著作、著作→人物
+特征/要素类：概念→特征（列举题）、挖去一个特征（填空题）、特征→概念（反向选择）
+关联/区别类："X与Y的共同点/区别是"、"以下哪项不属于X的范畴"
+背景/渊源类："X理论的提出受什么影响"、"X是为了反驳什么观点"
+
+## 输出格式
+严格输出以下JSON（不要包含markdown代码块标记）：
+{
+  "knowledge_points": [
+    {
+      "id": "kp_001",
+      "content": "知识点原文概括",
+      "tags": ["考查角度标签"],
+      "questions": {
+        "choice": [
+          {
+            "text": "选择题题目",
+            "options": ["A. 选项A", "B. 选项B", "C. 选项C", "D. 选项D"],
+            "answer": "A",
+            "explanation": "A是正确答案因为...；B选项的XX是...领域的...；C选项...；D选项...（每个选项都要有记忆价值）"
+          }
+        ],
+        "fill_blank": [
+          {
+            "text": "包含____的填空题目，挖去必须记忆的关键术语",
+            "answer": "填空答案（多个等价表述用中文逗号分隔）",
+            "explanation": "帮助记忆的简短说明"
+          }
+        ],
+        "short_answer": [
+          {
+            "text": "设空范围较大的题目，需要回忆完整句子或段落",
+            "answer": "标准答案（较完整）",
+            "keywords": ["关键采分点1", "关键采分点2"]
+          }
+        ]
+      }
+    }
+  ]
+}`;
+
+async function callDeepSeekAPI(userText) {
+  if (!settings.apiKey) throw new Error('请先在设置中填写 DeepSeek API Key');
+  const resp = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.apiKey}` },
+    body: JSON.stringify({
+      model: settings.model || 'deepseek-chat',
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: `请将以下知识点文本处理为题目：\n\n${userText}` }
+      ],
+      temperature: 0.7,
+      max_tokens: 16000,
+      response_format: { type: 'json_object' }
+    })
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error?.message || `API请求失败 (${resp.status})`);
+  }
+  const respData = await resp.json();
+  let content = respData.choices[0].message.content;
+  // Strip markdown code fences if present
+  content = content.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
+  return JSON.parse(content);
+}
+
+function parseAIResult(aiResult) {
+  const newKPs = [];
+  for (const raw of (aiResult.knowledge_points || [])) {
+    const kp = {
+      id: uid(),
+      content: raw.content || '',
+      tags: raw.tags || [],
+      questions: {
+        choice: (raw.questions?.choice || []).map(q => ({ id: uid(), type: 'choice', text: q.text, options: q.options, answer: q.answer, explanation: q.explanation || '', streak: 0 })),
+        fill_blank: (raw.questions?.fill_blank || []).map(q => ({ id: uid(), type: 'fill_blank', text: q.text, answer: q.answer, explanation: q.explanation || '', streak: 0 })),
+        short_answer: (raw.questions?.short_answer || []).map(q => ({ id: uid(), type: 'short_answer', text: q.text, answer: q.answer, keywords: q.keywords || [], streak: 0 }))
+      },
+      currentLevel: 'choice',
+      streak: 0,
+      weight: 100,
+      killed: false,
+      killedAt: null,
+      _wasCorrectBefore: false
+    };
+    // Set initial level to first available
+    const order = getLevelOrder(kp);
+    if (order.length === 0) continue; // skip KPs with no questions
+    kp.currentLevel = order[0];
+    newKPs.push(kp);
+  }
+  return newKPs;
+}
+
+// ──────────────────────────────────────
+// 6. MANUAL PARSER
+// ──────────────────────────────────────
+function parseManualText(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  const items = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Check for choice question
+    if (!line.match(/^[A-Da-d][\.\、\)]\s/) && !line.match(/^答案\s*[:：]/i)) {
+      const qLine = line;
+      const options = [];
+      i++;
+      while (i < lines.length && lines[i].match(/^[A-Da-d][\.\、\)]\s/)) {
+        options.push(lines[i]);
+        i++;
+      }
+      let answer = '';
+      if (i < lines.length && lines[i].match(/^答案\s*[:：]/i)) {
+        answer = lines[i].replace(/^答案\s*[:：]\s*/i, '').trim();
+        i++;
+      }
+      if (options.length >= 2) {
+        items.push({
+          type: 'choice',
+          text: qLine,
+          options: options,
+          answer: answer || (options[0] ? options[0].charAt(0) : 'A'),
+          explanation: ''
+        });
+      } else {
+        // Try separator parse
+        const sep = line.includes('|') ? '|' : line.includes('=') ? '=' : line.includes('：') ? '：' : line.includes(':') ? ':' : null;
+        if (sep) {
+          const parts = line.split(sep);
+          const q = parts[0].trim();
+          const a = parts.slice(1).join(sep).trim();
+          const type = (q.includes('____') || q.includes('（）') || q.includes('()')) ? 'fill_blank' : 'short_answer';
+          items.push({ type, text: q, answer: a, options: [], explanation: '' });
+        } else {
+          items.push({ type: 'short_answer', text: line, answer: '', options: [], explanation: '' });
+        }
+      }
+    } else {
+      i++;
+    }
+  }
+
+  // Group into a single KP
+  if (items.length === 0) return [];
+  const questions = { choice: [], fill_blank: [], short_answer: [] };
+  for (const item of items) {
+    const q = { id: uid(), type: item.type, text: item.text, options: item.options, answer: item.answer, explanation: item.explanation, keywords: [], streak: 0 };
+    questions[item.type].push(q);
+  }
+  return [{
+    id: uid(),
+    content: '手动导入',
+    tags: ['手动导入'],
+    questions: questions,
+    currentLevel: 'choice',
+    streak: 0,
+    weight: 100,
+    killed: false,
+    killedAt: null,
+    _wasCorrectBefore: false
+  }];
+}
+
+// ──────────────────────────────────────
+// 7. UI STATE
+// ──────────────────────────────────────
+data.currentKP = null;
+data.currentQuestion = null;
+
+function getMasteredCount() {
+  return data.kps.filter(kp => !kp.killed && kp.currentLevel === 'mastered').length;
+}
+
+function getTotalActive() {
+  return data.kps.filter(kp => !kp.killed).length;
+}
+
+function updateTopBar() {
+  const mastered = getMasteredCount();
+  const total = getTotalActive();
+  document.getElementById('progressText').textContent = `${mastered}/${total}`;
+  document.getElementById('progressFill').style.width = total > 0 ? `${(mastered / total) * 100}%` : '0%';
+  document.getElementById('todayCount').textContent = data.stats.count;
+  const acc = data.stats.attempts > 0 ? Math.round((data.stats.correct / data.stats.attempts) * 100) : 0;
+  document.getElementById('accuracyVal').textContent = acc + '%';
+}
+
+// ──────────────────────────────────────
+// 8. STUDY VIEW RENDERING
+// ──────────────────────────────────────
+function renderStudy() {
+  updateTopBar();
+
+  const mastered = getMasteredCount();
+  const total = getTotalActive();
+  const empty = document.getElementById('emptyState');
+  const card = document.getElementById('questionCard');
+  const done = document.getElementById('doneState');
+
+  if (total === 0) {
+    empty.style.display = ''; card.style.display = 'none'; done.style.display = 'none';
+    return;
+  }
+  if (mastered >= total && total > 0) {
+    empty.style.display = 'none'; card.style.display = 'none'; done.style.display = '';
+    if (!data._celebrated) { showCelebration(); data._celebrated = true; }
+    return;
+  }
+
+  data._celebrated = false;
+  empty.style.display = 'none'; done.style.display = 'none';
+  card.style.display = '';
+
+  const selected = selectNextQuestion();
+  if (!selected) {
+    // All done or all in cooling pool
+    card.style.display = 'none'; done.style.display = '';
+    return;
+  }
+
+  data.currentKP = selected.kp;
+  data.currentQuestion = selected.question;
+  const q = selected.question;
+  const kp = selected.kp;
+
+  // Reset UI
+  document.getElementById('optionsList').innerHTML = '';
+  document.getElementById('optionsList').style.display = 'none';
+  document.getElementById('textInputWrap').style.display = 'none';
+  document.getElementById('textareaInputWrap').style.display = 'none';
+  document.getElementById('submitBtn').style.display = 'none';
+  document.getElementById('feedback').className = 'feedback';
+  document.getElementById('feedback').innerHTML = '';
+  document.getElementById('selfAssess').className = 'self-assess';
+  document.getElementById('postActions').style.display = 'none';
+  document.getElementById('qText').textContent = '';
+  document.getElementById('qBadge').textContent = '';
+  document.getElementById('qBadge').className = 'question-type-badge';
+  document.getElementById('qLevel').textContent = '';
+  document.getElementById('qTags').innerHTML = '';
+
+  if (!q) {
+    // KP has no questions at current level — auto-promote
+    const next = getNextLevel(kp);
+    if (next) { kp.currentLevel = next; saveData(data); renderStudy(); return; }
+    kp.currentLevel = 'mastered'; saveData(data); renderStudy(); return;
+  }
+
+  // Render question
+  const typeLabel = questionTypeLabel(q.type);
+  document.getElementById('qBadge').textContent = typeLabel;
+  document.getElementById('qBadge').className = 'question-type-badge ' + badgeClass(q.type);
+  const qStreak = q.streak || 0; const levelQCount = (kp.questions[kp.currentLevel] || []).length; const doneCount = (kp.questions[kp.currentLevel] || []).filter(q => (q.streak || 0) >= STREAK_TO_ADVANCE).length; document.getElementById('qLevel').textContent = `本题连对 ${qStreak}/${STREAK_TO_ADVANCE} · 本题型进度 ${doneCount}/${levelQCount}`;
+  document.getElementById('qTags').innerHTML = kp.tags.map(t => `<span class="question-tag">${escapeHtml(t)}</span>`).join('');
+
+  if (q.type === 'choice') {
+    document.getElementById('qText').textContent = q.text;
+    const optList = document.getElementById('optionsList');
+    optList.style.display = '';
+    q.options.forEach((opt, idx) => {
+      const btn = document.createElement('button');
+      btn.className = 'option-btn';
+      const letter = opt.match(/^[A-Da-d]/) ? opt.charAt(0) : String.fromCharCode(65 + idx);
+      btn.innerHTML = `<span class="opt-letter">${letter}</span><span>${escapeHtml(opt.replace(/^[A-Da-d][\.\、\)]\s*/, ''))}</span>`;
+      btn.onclick = () => submitChoice(letter, q);
+      optList.appendChild(btn);
+    });
+  } else if (q.type === 'fill_blank') {
+    document.getElementById('qText').textContent = q.text;
+    document.getElementById('textInputWrap').style.display = '';
+    document.getElementById('textInput').value = '';
+    document.getElementById('submitBtn').style.display = '';
+    document.getElementById('textInput').focus();
+  } else if (q.type === 'short_answer') {
+    document.getElementById('qText').textContent = q.text;
+    document.getElementById('textareaInputWrap').style.display = '';
+    document.getElementById('textareaInput').value = '';
+    document.getElementById('submitBtn').style.display = '';
+  }
+}
+
+function submitChoice(letter, q) {
+  const correctAnswer = q.answer.trim().charAt(0).toUpperCase();
+  const isCorrect = letter.toUpperCase() === correctAnswer;
+
+  // Disable all options and highlight
+  const allBtns = document.querySelectorAll('.option-btn');
+  allBtns.forEach(btn => {
+    btn.disabled = true;
+    const btnLetter = btn.querySelector('.opt-letter').textContent;
+    if (btnLetter === correctAnswer) btn.classList.add('correct');
+    if (btnLetter === letter.toUpperCase() && !isCorrect) btn.classList.add('wrong');
+  });
+
+  showFeedback(isCorrect, q.explanation, q.answer);
+  processAnswer(isCorrect);
+  document.getElementById('postActions').style.display = '';
+  document.getElementById('nextBtn').focus();
+  updateTopBar();
+}
+
+function submitAnswer() {
+  const q = data.currentQuestion;
+  if (!q) return;
+  document.getElementById('submitBtn').style.display = 'none';
+
+  if (q.type === 'fill_blank') {
+    const userAns = document.getElementById('textInput').value.trim();
+    const correctAns = q.answer;
+    const isCorrect = checkFillAnswer(userAns, correctAns);
+    showFeedback(isCorrect, q.explanation, q.answer);
+    processAnswer(isCorrect);
+    document.getElementById('postActions').style.display = '';
+    document.getElementById('nextBtn').focus();
+  } else if (q.type === 'short_answer') {
+    const userAns = document.getElementById('textareaInput').value.trim();
+    document.getElementById('textareaInputWrap').style.display = 'none';
+    document.getElementById('userAnswerDisplay').textContent = userAns || '(未作答)';
+    document.getElementById('modelAnswerDisplay').textContent = q.answer;
+    document.getElementById('selfAssess').className = 'self-assess show';
+  }
+  updateTopBar();
+}
+
+function selfAssess(isCorrect) {
+  processAnswer(isCorrect);
+  const q = data.currentQuestion;
+  showFeedback(isCorrect, '', q ? q.answer : '');
+  document.getElementById('selfAssess').className = 'self-assess';
+  document.getElementById('postActions').style.display = '';
+  document.getElementById('nextBtn').focus();
+  updateTopBar();
+}
+
+function checkFillAnswer(userAns, correctAns) {
+  const u = userAns.replace(/\s+/g, '').toLowerCase();
+  // Accept multiple correct answers separated by commas or Chinese commas
+  const acceptable = correctAns.split(/[,，、]/).map(s => s.replace(/\s+/g, '').toLowerCase());
+  return acceptable.some(a => u === a || u.includes(a) || a.includes(u));
+}
+
+function showFeedback(isCorrect, explanation, answer) {
+  const fb = document.getElementById('feedback');
+  fb.className = 'feedback show ' + (isCorrect ? 'correct' : 'wrong');
+  fb.innerHTML = isCorrect
+    ? `✅ 回答正确！`
+    : `❌ 回答错误，正确答案是：<strong>${escapeHtml(answer)}</strong>`;
+  if (explanation) {
+    fb.innerHTML += `<div class="explanation">${escapeHtml(explanation)}</div>`;
+  }
+}
+
+function nextQuestion() { renderStudy(); }
+
+function killCurrent() {
+  if (!data.currentKP) return;
+  killKP(data.currentKP.id);
+  renderBank();
+  renderStudy();
+}
+
+// ──────────────────────────────────────
+// 9. BANK VIEW
+// ──────────────────────────────────────
+function renderBank() {
+  const list = document.getElementById('kpList');
+  list.innerHTML = '';
+  if (data.kps.length === 0) {
+    list.innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:24px;">暂无知识点</p>';
+    return;
+  }
+  data.kps.forEach(kp => {
+    const totalQ = (kp.questions.choice?.length || 0) + (kp.questions.fill_blank?.length || 0) + (kp.questions.short_answer?.length || 0);
+    const div = document.createElement('div');
+    div.className = 'kp-item' + (kp.killed ? ' killed' : '');
+    div.innerHTML = `
+      <div class="kp-info">
+        <div class="kp-content">${escapeHtml(kp.content || kp.tags.join(' · ') || '(未命名)')}</div>
+        <div class="kp-meta">
+          <span class="level-dot ${kp.currentLevel === 'mastered' ? 'level-mastered' : kp.currentLevel === 'short_answer' ? 'level-short' : kp.currentLevel === 'fill_blank' ? 'level-fill' : 'level-choice'}"></span>
+          ${levelLabel(kp.currentLevel)} · ${totalQ} 题 · 权重 ${kp.weight}
+          ${kp.killed ? ' · 🔪 已斩杀' : ''}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        ${kp.killed ? `<button class="btn btn-sm btn-ghost" onclick="unkillKP('${kp.id}')">恢复</button>` : `<button class="btn btn-sm btn-danger" onclick="killKP('${kp.id}'); renderBank();">斩杀</button>`}
+        <button class="btn btn-sm btn-ghost" onclick="resetKP('${kp.id}')">重置</button>
+      </div>
+    `;
+    list.appendChild(div);
+  });
+}
+
+function resetKP(kpId) {
+  const kp = data.kps.find(k => k.id === kpId);
+  if (!kp) return;
+  kp.currentLevel = getLevelOrder(kp)[0] || 'choice';
+  kp.weight = 100;
+  kp.killed = false;
+  kp.killedAt = null;
+  kp._wasCorrectBefore = false;
+  // Reset all question streaks
+  ['choice', 'fill_blank', 'short_answer'].forEach(t => {
+    (kp.questions[t] || []).forEach(q => { q.streak = 0; });
+  });
+  saveData(data);
+  renderBank();
+  renderStudy();
+  toast('知识点已重置', 'info');
+}
+
+// ──────────────────────────────────────
+// 10. IMPORT / EXPORT
+// ──────────────────────────────────────
+async function aiGenerate() {
+  const fileInput = document.getElementById('fileInput');
+  const pasteText = document.getElementById('pasteText').value.trim();
+  let text = pasteText;
+
+  if (fileInput.files.length > 0) {
+    const file = fileInput.files[0];
+    try {
+      if (file.name.endsWith('.docx')) {
+        text = await DocxParser.extractText(file);
+      } else {
+        text = await file.text();
+      }
+    } catch (e) {
+      toast('文件解析失败：' + e.message, 'error');
+      return;
+    }
+  }
+
+  if (!text || text.length < 10) {
+    toast('请上传文件或粘贴至少10个字的知识点文本', 'error');
+    return;
+  }
+
+  if (text.length > 30000) {
+    toast('文本过长，建议分批导入（每次不超过30000字）', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('aiGenerateBtn');
+  const status = document.getElementById('aiStatus');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> AI 正在生成题目...';
+  status.innerHTML = '';
+  status.style.color = 'var(--text-secondary)';
+
+  try {
+    const result = await callDeepSeekAPI(text);
+    const newKPs = parseAIResult(result);
+    if (newKPs.length === 0) {
+      throw new Error('AI 未能生成有效题目，请检查知识点文本格式');
+    }
+    data.kps = data.kps.concat(newKPs);
+    saveData(data);
+    status.innerHTML = `✅ 成功生成 ${newKPs.length} 个知识点，共 ${newKPs.reduce((s, kp) => s + (kp.questions.choice?.length||0) + (kp.questions.fill_blank?.length||0) + (kp.questions.short_answer?.length||0), 0)} 道题`;
+    status.style.color = 'var(--success)';
+    document.getElementById('pasteText').value = '';
+    fileInput.value = '';
+    renderBank();
+    renderStudy();
+    updateTopBar();
+    toast('题目生成完成！开始刷题吧 🚀', 'success');
+  } catch (e) {
+    status.innerHTML = `❌ ${e.message}`;
+    status.style.color = 'var(--danger)';
+    toast('生成失败：' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🚀 AI 生成题目';
+  }
+}
+
+function manualImport() {
+  const text = document.getElementById('manualText').value.trim();
+  if (!text) { toast('请粘贴题目文本', 'error'); return; }
+  const newKPs = parseManualText(text);
+  if (newKPs.length === 0) { toast('未能识别任何题目，请检查格式', 'error'); return; }
+  data.kps = data.kps.concat(newKPs);
+  saveData(data);
+  const totalQ = newKPs.reduce((s, kp) => s + (kp.questions.choice?.length||0) + (kp.questions.fill_blank?.length||0) + (kp.questions.short_answer?.length||0), 0);
+  document.getElementById('manualText').value = '';
+  renderBank();
+  renderStudy();
+  updateTopBar();
+  toast(`成功导入 ${totalQ} 道题目`, 'success');
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify({ kps: data.kps, version: '2.0', exportedAt: new Date().toISOString() }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `quiz-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('题库已导出', 'success');
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function() {
+    try {
+      const imported = JSON.parse(reader.result);
+      if (!imported.kps || !Array.isArray(imported.kps)) throw new Error('格式不正确');
+      if (!confirm(`确认导入 ${imported.kps.length} 个知识点？当前题库将被覆盖。`)) return;
+      data.kps = imported.kps;
+      data.coolingPool = [];
+      data.lastKilled = null;
+      data._celebrated = false;
+      saveData(data);
+      renderBank(); renderStudy(); updateTopBar();
+      toast('题库导入成功', 'success');
+    } catch (e) {
+      toast('导入失败：文件格式不正确', 'error');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function clearAll() {
+  if (!confirm('确定要清空所有题库数据吗？此操作不可恢复！')) return;
+  data.kps = [];
+  data.coolingPool = [];
+  data.lastKilled = null;
+  data._celebrated = false;
+  data.stats = { today: todayStr, count: 0, correct: 0, attempts: 0 };
+  saveData(data);
+  renderBank(); renderStudy(); updateTopBar();
+  toast('所有数据已清空', 'info');
+}
+
+// ──────────────────────────────────────
+// 11. CELEBRATION
+// ──────────────────────────────────────
+function showCelebration() {
+  const messages = [
+    '🎉 太棒了！你已掌握全部知识点！',
+    '🏆 恭喜！所有题目已通关！',
+    '⭐ 了不起！知识尽在掌握之中！',
+    '🚀 满分！你是记忆大师！',
+  ];
+  const msg = messages[Math.floor(Math.random() * messages.length)];
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.id = 'celebrationOverlay';
+  overlay.innerHTML = `<div class="overlay-card"><div class="overlay-emoji">🎉</div><h2>${msg}</h2><p>共掌握 ${getMasteredCount()} 个知识点</p><button class="btn btn-primary btn-lg" onclick="document.getElementById('celebrationOverlay').remove()">继续学习</button></div>`;
+  document.body.appendChild(overlay);
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+  spawnConfetti();
+}
+
+function spawnConfetti() {
+  const colors = ['#4f46e5','#10b981','#f59e0b','#ef4444','#ec4899','#06b6d4','#8b5cf6'];
+  for (let i = 0; i < 80; i++) {
+    const el = document.createElement('div');
+    el.className = 'confetti-piece';
+    el.style.left = Math.random() * 100 + '%';
+    el.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+    el.style.width = (6 + Math.random() * 8) + 'px';
+    el.style.height = (6 + Math.random() * 8) + 'px';
+    el.style.animationDuration = (2 + Math.random() * 3) + 's';
+    el.style.animationDelay = Math.random() * 0.5 + 's';
+    el.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+  }
+}
+
+// ──────────────────────────────────────
+// 12. UI HELPERS
+// ──────────────────────────────────────
+function toast(msg, type) {
+  const c = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, 2500);
+}
+
+let undoBarTimer = null;
+function showUndoBar() {
+  const bar = document.getElementById('undoBar');
+  bar.style.display = '';
+  if (undoBarTimer) clearTimeout(undoBarTimer);
+  undoBarTimer = setTimeout(() => { bar.style.display = 'none'; data.lastKilled = null; }, 15000);
+}
+function hideUndoBar() {
+  document.getElementById('undoBar').style.display = 'none';
+  if (undoBarTimer) clearTimeout(undoBarTimer);
+  data.lastKilled = null;
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+  document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+  document.getElementById('view-' + name).style.display = '';
+  if (name === 'bank') renderBank();
+  if (name === 'study') renderStudy();
+  if (name === 'settings') {
+    document.getElementById('apiKeyInput').value = settings.apiKey || '';
+    document.getElementById('modelSelect').value = settings.model || 'deepseek-chat';
+  }
+}
+
+function saveApiKey() {
+  settings.apiKey = document.getElementById('apiKeyInput').value.trim();
+  settings.model = document.getElementById('modelSelect').value;
+  saveSettings(settings);
+  toast('API Key 已保存', 'success');
+}
+
+// ──────────────────────────────────────
+// 13. EVENT BINDINGS & INIT
+// ──────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+// File drop/upload
+const fileDrop = document.getElementById('fileDrop');
+const fileInput = document.getElementById('fileInput');
+fileDrop.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length > 0) {
+    fileDrop.querySelector('p:first-of-type').textContent = '已选择：' + fileInput.files[0].name;
+  }
+});
+fileDrop.addEventListener('dragover', e => { e.preventDefault(); fileDrop.classList.add('drag-over'); });
+fileDrop.addEventListener('dragleave', () => fileDrop.classList.remove('drag-over'));
+fileDrop.addEventListener('drop', e => {
+  e.preventDefault();
+  fileDrop.classList.remove('drag-over');
+  if (e.dataTransfer.files.length > 0) {
+    fileInput.files = e.dataTransfer.files;
+    fileDrop.querySelector('p:first-of-type').textContent = '已选择：' + e.dataTransfer.files[0].name;
+  }
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === '1') { const btns = document.querySelectorAll('.option-btn'); if (btns.length >= 1) btns[0].click(); }
+  if (e.key === '2') { const btns = document.querySelectorAll('.option-btn'); if (btns.length >= 2) btns[1].click(); }
+  if (e.key === '3') { const btns = document.querySelectorAll('.option-btn'); if (btns.length >= 3) btns[2].click(); }
+  if (e.key === '4') { const btns = document.querySelectorAll('.option-btn'); if (btns.length >= 4) btns[3].click(); }
+  if (e.key === 'Enter' || e.key === ' ') {
+    const nextBtn = document.getElementById('nextBtn');
+    if (nextBtn.style.display !== 'none' && document.getElementById('postActions').style.display !== 'none') {
+      nextQuestion(); e.preventDefault();
+    }
+  }
+});
+
+// Init
+function init() {
+  // Set initial level for any KP that doesn't have one
+  data.kps.forEach(kp => {
+    if (!kp.currentLevel || kp.currentLevel === 'choice') { /* fine */ }
+    const order = getLevelOrder(kp);
+    if (order.length === 0) { kp.currentLevel = 'mastered'; return; }
+    if (!order.includes(kp.currentLevel)) kp.currentLevel = order[0];
+    if (!kp.questions) kp.questions = { choice: [], fill_blank: [], short_answer: [] };
+    if (!kp.weight) kp.weight = 100;
+    if (kp._wasCorrectBefore === undefined) kp._wasCorrectBefore = false;
+    // Ensure all questions have IDs and streak fields
+    ['choice', 'fill_blank', 'short_answer'].forEach(t => {
+      (kp.questions[t] || []).forEach(q => { if (!q.id) q.id = uid(); if (q.streak === undefined) q.streak = 0; });
+    });
+  });
+
+  const mastered = getMasteredCount();
+  const total = getTotalActive();
+  if (total > 0 && mastered >= total) data._celebrated = true;
+
+  saveData(data);
+  updateTopBar();
+  renderStudy();
+  renderBank();
+
+  // Load settings into form
+  document.getElementById('apiKeyInput').value = settings.apiKey || '';
+  document.getElementById('modelSelect').value = settings.model || 'deepseek-chat';
+}
+
+init();
+</script>
+</body>
+</html>
