@@ -157,6 +157,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 .stream-output { background: #1e1e2e; color: #cdd6f4; border-radius: var(--radius-sm); padding: 12px; margin-top: 8px; max-height: 180px; overflow-y: auto; font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace; font-size: .72rem; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
 .stream-toggle { font-size: .75rem; color: var(--primary); cursor: pointer; user-select: none; }
 
+/* Toggle switch */
+.toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; cursor: pointer; inset: 0; background: var(--border); border-radius: 24px; transition: .2s; }
+.toggle-slider::before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+.toggle-switch input:checked + .toggle-slider { background: var(--primary); }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+
 /* KP list */
 .kp-list { display: flex; flex-direction: column; gap: 8px; max-height: 500px; overflow-y: auto; }
 .kp-item { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; background: var(--bg); border-radius: var(--radius-sm); gap: 12px; }
@@ -267,6 +275,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
       <textarea id="textareaInput" placeholder="请回忆并输入相关内容..."></textarea>
     </div>
     <button class="btn btn-primary" id="submitBtn" style="display:none;" onclick="submitAnswer()">提交答案</button>
+    <button class="btn btn-sm btn-ghost" id="forgotBtn" style="display:none;margin-left:8px;" onclick="submitAnswer(true)">想不起来了，显示答案</button>
 
     <!-- Feedback -->
     <div class="feedback" id="feedback"></div>
@@ -277,10 +286,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
         <div class="answer-box"><div class="label">你的答案</div><div class="content" id="userAnswerDisplay"></div></div>
         <div class="answer-box"><div class="label">标准答案</div><div class="content" id="modelAnswerDisplay"></div></div>
       </div>
-      <p style="margin-bottom:12px;font-weight:500;">你的答案是否正确？</p>
+      <p style="margin-bottom:6px;font-size:.82rem;color:var(--text-muted);">对比后，如认为自己的表述与原文意思一致，可点下方按钮标记为答对</p>
       <div class="btn-row">
-        <button class="btn btn-success" onclick="selfAssess(true)">✓ 答对了</button>
-        <button class="btn btn-danger" onclick="selfAssess(false)">✗ 没答对</button>
+        <button class="btn btn-sm btn-success" onclick="selfAssessClaim()">我认为答对了 ✓</button>
+        <span style="font-size:.78rem;color:var(--text-muted);margin-left:12px;">否则直接点下一题即可（默认按未答对处理）</span>
       </div>
     </div>
 
@@ -398,6 +407,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
       <select id="modelSelect" style="padding:8px 12px;border:2px solid var(--border);border-radius:var(--radius-sm);font-size:.9rem;">
         <option value="deepseek-chat">deepseek-chat</option>
       </select>
+    </div>
+  </div>
+  <div class="card">
+    <h3 style="margin-bottom:16px;">学习设置</h3>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">回顾已完成批次</div>
+        <div class="setting-desc">开启后，已掌握的批次也会出现在刷题中，方便考前全面复习</div>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="reviewModeToggle" onchange="toggleReviewMode(this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
     </div>
   </div>
   <div class="card">
@@ -525,7 +547,7 @@ function loadData() {
     if (!parsed.projects && parsed.kps) {
       const p = {
         id: uid(), name: '默认项目',
-        kps: parsed.kps.map((kp, i) => { kp.batch = kp.batch || 1; return kp; }),
+        kps: parsed.kps.map((kp, i) => { kp.batch = kp.batch || 1; kp.hidden = kp.hidden || kp.killed || false; kp.killedAt = kp.killedAt || null; kp.respawnDays = kp.respawnDays || RESPAWN_DAYS; return kp; }),
         stats: parsed.stats || { today: '', count: 0, correct: 0, attempts: 0 },
         coolingPool: parsed.coolingPool || [],
         lastKilled: parsed.lastKilled || null,
@@ -544,7 +566,7 @@ function saveData(d) { try { localStorage.setItem(STORE_KEY, JSON.stringify(d));
 // Active project helper — always returns a valid project, creating one if needed
 function proj() {
   if (!data.projects || data.projects.length === 0) {
-    const p = { id: uid(), name: '默认项目', kps: [], stats: { today: '', count: 0, correct: 0, attempts: 0 }, coolingPool: [], lastKilled: null, _celebrated: false, activeBatch: 1 };
+    const p = { id: uid(), name: '默认项目', kps: [], stats: { today: '', count: 0, correct: 0, attempts: 0 }, coolingPool: [], lastKilled: null, _celebrated: false, activeBatch: 1, reviewMode: false };
     data.projects = [p];
     data.activeProjectId = p.id;
     saveData(data);
@@ -591,6 +613,8 @@ if (!data.projects || data.projects.length === 0) {
 const COOLING_SIZE = 15;
 const STREAK_TO_ADVANCE = 2;
 const BATCH_SIZE = 10;  // 每批最多10个知识点
+const RESPAWN_DAYS = 2;  // 斩杀后多少天自动复活
+const FORGOT_WEIGHT = 80;  // "我忘了"的权重惩罚（vs 答错 +50）
 
 function getLevelOrder(kp) {
   const levels = [];
@@ -608,19 +632,38 @@ function getNextLevel(kp) {
 }
 
 function selectNextQuestion() {
-  const activeBatch = proj().activeBatch || 1;
-  const allAvailable = proj().kps.filter(kp => !kp.killed && kp.currentLevel !== 'mastered' && (kp.batch || 1) === activeBatch);
+  const p = proj();
+  const activeBatch = p.activeBatch || 1;
+  const now = Date.now();
+
+  // Auto-respawn: unhide KPs that have passed their respawn time
+  let respawned = null;
+  p.kps.forEach(kp => {
+    if (kp.hidden && kp.killedAt && (now - kp.killedAt) > (kp.respawnDays || RESPAWN_DAYS) * 86400000) {
+      kp.hidden = false;
+      kp.killedAt = null;
+      kp._justRespawned = true;
+      respawned = kp;
+    }
+  });
+  if (respawned) saveData(data);
+
+  // Filter: not hidden, not mastered, in current batch (or reviewMode = all batches)
+  const batchFilter = p.reviewMode ? () => true : (kp => (kp.batch || 1) === activeBatch);
+  const allAvailable = p.kps.filter(kp => !kp.hidden && kp.currentLevel !== 'mastered' && batchFilter(kp));
+
   // If current batch is complete but more batches exist, auto-advance
-  if (allAvailable.length === 0) {
-    const maxBatch = Math.max(...proj().kps.map(k => k.batch || 1), 1);
+  if (allAvailable.length === 0 && !p.reviewMode) {
+    const maxBatch = Math.max(...p.kps.map(k => k.batch || 1), 1);
     if (activeBatch < maxBatch) {
-      proj().activeBatch = activeBatch + 1;
+      p.activeBatch = activeBatch + 1;
       saveData(data);
       toast(`🎉 第${activeBatch}批已全部掌握！自动进入第${activeBatch + 1}批`, 'success');
       return selectNextQuestion();
     }
     return null;
   }
+  if (allAvailable.length === 0) return null;
   const available = allAvailable;
 
   // Step 1: collect all unanswered candidates (prefer not in cooling pool)
@@ -675,7 +718,7 @@ function selectNextQuestion() {
   return fallback;
 }
 
-function processAnswer(isCorrect) {
+function processAnswer(isCorrect, isForgot) {
   const kp = data.currentKP;
   const q = data.currentQuestion;
   if (!kp || !q) return;
@@ -686,11 +729,9 @@ function processAnswer(isCorrect) {
     proj().stats.correct++;
     q.streak = (q.streak || 0) + 1;
     kp.weight = Math.max(20, (kp.weight || 100) - 30);
-    // Check if ALL questions at current level have reached the threshold
     const allQs = kp.questions[kp.currentLevel] || [];
     const allDone = allQs.length > 0 && allQs.every(q => (q.streak || 0) >= STREAK_TO_ADVANCE);
     if (allDone) {
-      // Reset streaks for current level questions before advancing
       allQs.forEach(q => { q.streak = 0; });
       const nextLvl = getNextLevel(kp);
       if (nextLvl) {
@@ -704,9 +745,10 @@ function processAnswer(isCorrect) {
     }
   } else {
     q.streak = 0;
-    kp.weight = Math.min(500, (kp.weight || 100) + 50);
+    const penalty = isForgot ? FORGOT_WEIGHT : 50;
+    kp.weight = Math.min(500, (kp.weight || 100) + penalty);
     if (kp._wasCorrectBefore) {
-      kp.weight = Math.min(500, (kp.weight || 100) + 50);
+      kp.weight = Math.min(500, (kp.weight || 100) + penalty);
     }
   }
   kp._wasCorrectBefore = kp._wasCorrectBefore || isCorrect;
@@ -715,9 +757,10 @@ function processAnswer(isCorrect) {
 
 function killKP(kpId) {
   const kp = proj().kps.find(k => k.id === kpId);
-  if (!kp || kp.killed) return;
-  kp.killed = true;
+  if (!kp || kp.hidden) return;
+  kp.hidden = true;
   kp.killedAt = Date.now();
+  kp.respawnDays = RESPAWN_DAYS;
   proj().lastKilled = kpId;
   saveData(data);
   showUndoBar();
@@ -725,8 +768,8 @@ function killKP(kpId) {
 
 function unkillKP(kpId) {
   const kp = proj().kps.find(k => k.id === kpId);
-  if (!kp || !kp.killed) return;
-  kp.killed = false;
+  if (!kp || !kp.hidden) return;
+  kp.hidden = false;
   kp.killedAt = null;
   saveData(data);
   renderBank();
@@ -736,9 +779,9 @@ function unkillKP(kpId) {
 function undoKill() {
   if (!proj().lastKilled) return false;
   const kp = proj().kps.find(k => k.id === proj().lastKilled);
-  if (!kp || !kp.killed) return false;
+  if (!kp || !kp.hidden) return false;
   if (Date.now() - kp.killedAt > 15000) { toast('撤销时间已过（15秒）', 'error'); return false; }
-  kp.killed = false;
+  kp.hidden = false;
   kp.killedAt = null;
   proj().lastKilled = null;
   saveData(data);
@@ -867,7 +910,7 @@ async function callDeepSeekAPI(userText, onChunk) {
         { role: 'user', content: `请将以下知识点文本处理为题目：\n\n${userText}` }
       ],
       temperature: 0.7,
-      max_tokens: 16000,
+      max_tokens: 8192,
       response_format: { type: 'json_object' },
       stream: true
     })
@@ -934,7 +977,7 @@ function parseAIResult(aiResult) {
       currentLevel: 'choice',
       streak: 0,
       weight: 100,
-      killed: false,
+      hidden: false,
       killedAt: null,
       _wasCorrectBefore: false
     };
@@ -1026,11 +1069,12 @@ data.currentKP = null;
 data.currentQuestion = null;
 
 function getMasteredCount() {
-  return proj().kps.filter(kp => !kp.killed && kp.currentLevel === 'mastered').length;
+  const p = proj();
+  return p.kps.filter(kp => !kp.hidden && kp.currentLevel === 'mastered').length;
 }
 
 function getTotalActive() {
-  return proj().kps.filter(kp => !kp.killed).length;
+  return proj().kps.filter(kp => !kp.hidden).length;
 }
 
 function updateTopBar() {
@@ -1091,6 +1135,7 @@ function renderStudy() {
   document.getElementById('textInputWrap').style.display = 'none';
   document.getElementById('textareaInputWrap').style.display = 'none';
   document.getElementById('submitBtn').style.display = 'none';
+  document.getElementById('forgotBtn').style.display = 'none';
   document.getElementById('feedback').className = 'feedback';
   document.getElementById('feedback').innerHTML = '';
   document.getElementById('selfAssess').className = 'self-assess';
@@ -1126,6 +1171,17 @@ function renderStudy() {
     fb.innerHTML = `⬆️ 已晋级到<strong>${lvlName}</strong>阶段，将从新的角度考查本知识点`;
   }
 
+  // 如果知识点是复活回来的
+  if (kp._justRespawned) {
+    kp._justRespawned = false;
+    saveData(data);
+    const days = Math.round((Date.now() - kp.killedAt) / 86400000) || 1;
+    const fb = document.getElementById('feedback');
+    fb.className = 'feedback show';
+    fb.style.background = '#fef3c7'; fb.style.color = '#92400e'; fb.style.border = '1px solid #fcd34d';
+    fb.innerHTML = `🔄 你曾在 <strong>${days}</strong> 天前掌握过这个知识点，再来巩固一次`;
+  }
+
   if (q.type === 'choice') {
     document.getElementById('qText').textContent = q.text;
     const optList = document.getElementById('optionsList');
@@ -1143,12 +1199,14 @@ function renderStudy() {
     document.getElementById('textInputWrap').style.display = '';
     document.getElementById('textInput').value = '';
     document.getElementById('submitBtn').style.display = '';
+    document.getElementById('forgotBtn').style.display = '';
     document.getElementById('textInput').focus();
   } else if (q.type === 'short_answer') {
     document.getElementById('qText').textContent = q.text;
     document.getElementById('textareaInputWrap').style.display = '';
     document.getElementById('textareaInput').value = '';
     document.getElementById('submitBtn').style.display = '';
+    document.getElementById('forgotBtn').style.display = '';
   }
 }
 
@@ -1172,17 +1230,22 @@ function submitChoice(letter, q) {
   updateTopBar();
 }
 
-function submitAnswer() {
+function submitAnswer(isForgot) {
   const q = data.currentQuestion;
   if (!q) return;
   document.getElementById('submitBtn').style.display = 'none';
+  document.getElementById('forgotBtn').style.display = 'none';
 
   if (q.type === 'fill_blank') {
-    const userAns = document.getElementById('textInput').value.trim();
-    const correctAns = q.answer;
-    const isCorrect = checkFillAnswer(userAns, correctAns);
-    showFeedback(isCorrect, q.explanation, q.answer);
-    processAnswer(isCorrect);
+    if (isForgot) {
+      showFeedback(false, q.explanation, q.answer);
+      processAnswer(false, true);
+    } else {
+      const userAns = document.getElementById('textInput').value.trim();
+      const isCorrect = checkFillAnswer(userAns, q.answer);
+      showFeedback(isCorrect, q.explanation, q.answer);
+      processAnswer(isCorrect);
+    }
     document.getElementById('postActions').style.display = '';
     document.getElementById('nextBtn').focus();
   } else if (q.type === 'short_answer') {
@@ -1191,12 +1254,18 @@ function submitAnswer() {
     document.getElementById('userAnswerDisplay').textContent = userAns || '(未作答)';
     document.getElementById('modelAnswerDisplay').textContent = q.answer;
     document.getElementById('selfAssess').className = 'self-assess show';
+    if (isForgot) selfAssess(false, true);
   }
   updateTopBar();
 }
 
-function selfAssess(isCorrect) {
-  processAnswer(isCorrect);
+function selfAssessClaim() {
+  // User claims their answer was correct
+  selfAssess(true, false);
+}
+
+function selfAssess(isCorrect, isForgot) {
+  processAnswer(isCorrect, isForgot);
   const q = data.currentQuestion;
   showFeedback(isCorrect, '', q ? q.answer : '');
   document.getElementById('selfAssess').className = 'self-assess';
@@ -1212,7 +1281,7 @@ function createProject(name) {
   const p = {
     id: uid(), name: name,
     kps: [], stats: { today: todayStr, count: 0, correct: 0, attempts: 0 },
-    coolingPool: [], lastKilled: null, _celebrated: false, activeBatch: 1
+    coolingPool: [], lastKilled: null, _celebrated: false, activeBatch: 1, reviewMode: false
   };
   data.projects.push(p);
   data.activeProjectId = p.id;
@@ -1272,12 +1341,12 @@ function renderProjectList() {
     const isActive = p.id === data.activeProjectId;
     const div = document.createElement('div');
     div.className = 'kp-item' + (isActive ? ' active-task' : '');
-    const mastered = p.kps.filter(k => !k.killed && k.currentLevel === 'mastered').length;
-    const total = p.kps.filter(k => !k.killed).length;
+    const mastered = p.kps.filter(k => !k.hidden && k.currentLevel === 'mastered').length;
+    const total = p.kps.filter(k => !k.hidden).length;
     div.innerHTML = `
       <div class="kp-info" style="cursor:pointer;" onclick="switchProject('${p.id}')">
         <div class="kp-content">${escapeHtml(p.name)} ${isActive ? '(当前)' : ''}</div>
-        <div class="kp-meta">${total} 知识点 · ${mastered} 已掌握 · ${p.kps.filter(k => k.killed).length} 已斩杀</div>
+        <div class="kp-meta">${total} 知识点 · ${mastered} 已掌握 · ${p.kps.filter(k => k.hidden).length} 已斩杀</div>
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0;">
         <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();renameProjectPrompt('${p.id}','${escapeHtml(p.name)}')">重命名</button>
@@ -1345,6 +1414,15 @@ function showFeedback(isCorrect, explanation, answer) {
   }
 }
 
+function togglePreCheckOriginal() {
+  const el = document.getElementById('preCheckOriginal');
+  if (el.style.display === 'none') {
+    el.style.display = '';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
 function toggleOriginalKP() {
   const el = document.getElementById('originalKPContent');
   if (el) {
@@ -1376,30 +1454,53 @@ function renderBank() {
   updateProjectSelect();
   const list = document.getElementById('kpList');
   list.innerHTML = '';
-  if (proj().kps.length === 0) {
+  const active = proj().kps.filter(k => !k.hidden);
+  const hidden = proj().kps.filter(k => k.hidden);
+  if (active.length === 0 && hidden.length === 0) {
     list.innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:24px;">暂无知识点</p>';
     return;
   }
-  proj().kps.forEach(kp => {
-    const totalQ = (kp.questions.choice?.length || 0) + (kp.questions.fill_blank?.length || 0) + (kp.questions.short_answer?.length || 0);
-    const div = document.createElement('div');
-    div.className = 'kp-item' + (kp.killed ? ' killed' : '');
-    div.innerHTML = `
-      <div class="kp-info">
-        <div class="kp-content">${escapeHtml(kp.content || kp.tags.join(' · ') || '(未命名)')}</div>
-        <div class="kp-meta">
-          <span class="level-dot ${kp.currentLevel === 'mastered' ? 'level-mastered' : kp.currentLevel === 'short_answer' ? 'level-short' : kp.currentLevel === 'fill_blank' ? 'level-fill' : 'level-choice'}"></span>
-          ${levelLabel(kp.currentLevel)} · ${totalQ} 题 · 权重 ${kp.weight}
-          ${kp.killed ? ' · 🔪 已斩杀' : ''}
-        </div>
-      </div>
-      <div style="display:flex;gap:6px;flex-shrink:0;">
-        ${kp.killed ? `<button class="btn btn-sm btn-ghost" onclick="unkillKP('${kp.id}')">恢复</button>` : `<button class="btn btn-sm btn-danger" onclick="killKP('${kp.id}'); renderBank();">斩杀</button>`}
-        <button class="btn btn-sm btn-ghost" onclick="resetKP('${kp.id}')">重置</button>
-      </div>
-    `;
-    list.appendChild(div);
+
+  // Active KPs
+  active.forEach(kp => {
+    renderKPItem(list, kp);
   });
+
+  // Hidden KPs (separator)
+  if (hidden.length > 0) {
+    const sep = document.createElement('div');
+    sep.style.cssText = 'padding:12px 0;margin-top:8px;border-top:1px dashed var(--border);font-size:.8rem;color:var(--text-muted);text-align:center;';
+    sep.textContent = `🔪 已斩杀 (${hidden.length}个，${RESPAWN_DAYS}天后自动复活)`;
+    list.appendChild(sep);
+    hidden.forEach(kp => {
+      renderKPItem(list, kp);
+    });
+  }
+}
+
+function renderKPItem(list, kp) {
+  const totalQ = (kp.questions.choice?.length || 0) + (kp.questions.fill_blank?.length || 0) + (kp.questions.short_answer?.length || 0);
+  const div = document.createElement('div');
+  div.className = 'kp-item' + (kp.hidden ? ' killed' : '');
+  const batchLabel = kp.batch ? `第${kp.batch}批 · ` : '';
+  const respawnInfo = kp.hidden && kp.killedAt
+    ? ` · ${Math.round((Date.now() - kp.killedAt) / 3600000)}小时前斩杀`
+    : '';
+  div.innerHTML = `
+    <div class="kp-info">
+      <div class="kp-content">${escapeHtml(kp.content || kp.tags.join(' · ') || '(未命名)')}</div>
+      <div class="kp-meta">
+        <span class="level-dot ${kp.currentLevel === 'mastered' ? 'level-mastered' : kp.currentLevel === 'short_answer' ? 'level-short' : kp.currentLevel === 'fill_blank' ? 'level-fill' : 'level-choice'}"></span>
+        ${batchLabel}${levelLabel(kp.currentLevel)} · ${totalQ} 题 · 权重 ${kp.weight}${respawnInfo}
+        ${kp.hidden ? ' · 🔪 已斩杀' : ''}
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0;">
+      ${kp.hidden ? `<button class="btn btn-sm btn-ghost" onclick="unkillKP('${kp.id}')">恢复</button>` : `<button class="btn btn-sm btn-danger" onclick="killKP('${kp.id}'); renderBank();">斩杀</button>`}
+      <button class="btn btn-sm btn-ghost" onclick="resetKP('${kp.id}')">重置</button>
+    </div>
+  `;
+  list.appendChild(div);
 }
 
 function resetKP(kpId) {
@@ -1407,7 +1508,7 @@ function resetKP(kpId) {
   if (!kp) return;
   kp.currentLevel = getLevelOrder(kp)[0] || 'choice';
   kp.weight = 100;
-  kp.killed = false;
+  kp.hidden = false;
   kp.killedAt = null;
   kp._wasCorrectBefore = false;
   // Reset all question streaks
@@ -1423,11 +1524,76 @@ function resetKP(kpId) {
 // ──────────────────────────────────────
 // 10. IMPORT / EXPORT
 // ──────────────────────────────────────
+
+// Smart splitting: detect numbered items, handling Arabic/Chinese numerals and sub-items
+function splitIntoChunks(text) {
+  const lines = text.split('\n');
+  const items = [];
+  let currentItem = '';
+
+  // Patterns for different numbering styles
+  const MAIN_ITEM_RE = /^(\d{1,3})[、.）\)]\s/;      // 1、 2. 3） 4)
+  const CN_NUM_RE = /^[一二三四五六七八九十]+[、.]\s/;  // 一、 二、 三、
+  const SUB_ITEM_RE = /^[a-zＡ-Ｚ][.、]\s/i;           // a. b. (lower/upper letters)
+  const SUB_PAREN_RE = /^[（(]\d{1,2}[）)]\s*/;       // (1) （2）
+  const SUB_CIRCLE_RE = /^[①②③④⑤⑥⑦⑧⑨⑩]/;          // ① ② ③
+
+  function isMainItem(line) {
+    return MAIN_ITEM_RE.test(line) || CN_NUM_RE.test(line);
+  }
+  function isSubItem(line) {
+    return SUB_ITEM_RE.test(line) || SUB_PAREN_RE.test(line) || SUB_CIRCLE_RE.test(line);
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      currentItem += '\n' + line;
+    } else if (isMainItem(trimmed) && !isSubItem(trimmed)) {
+      // Main item boundary: save previous, start new
+      if (currentItem.trim()) items.push(currentItem.trim());
+      currentItem = line;
+    } else if (isSubItem(trimmed) && currentItem.trim()) {
+      // Sub-item: belongs to current parent, don't split
+      currentItem += '\n' + line;
+    } else {
+      currentItem += '\n' + line;
+    }
+  }
+  if (currentItem.trim()) items.push(currentItem.trim());
+
+  // If fewer than 2 items detected, return as single chunk
+  if (items.length <= 1) return [text];
+
+  // Group into chunks of ~12 items to stay under token limit
+  const CHUNK_SIZE = 12;
+  const chunks = [];
+  for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+    chunks.push(items.slice(i, i + CHUNK_SIZE).join('\n\n'));
+  }
+  return chunks;
+}
+let _pendingText = null;  // 预检通过待生成的文本
+
 async function aiGenerate() {
   const fileInput = document.getElementById('fileInput');
   const pasteText = document.getElementById('pasteText').value.trim();
-  let text = pasteText;
+  const btn = document.getElementById('aiGenerateBtn');
+  const status = document.getElementById('aiStatus');
+  const summary = document.getElementById('aiSummary');
+  const panel = document.getElementById('aiProgressPanel');
 
+  // Phase 2: user confirmed pre-check, now actually generate
+  if (_pendingText) {
+    const text = _pendingText;
+    _pendingText = null;
+    summary.style.display = 'none';
+    await doGenerate(text);
+    return;
+  }
+
+  // Phase 1: parse input, run pre-check
+  let text = pasteText;
   if (fileInput.files.length > 0) {
     const file = fileInput.files[0];
     try {
@@ -1452,12 +1618,73 @@ async function aiGenerate() {
     return;
   }
 
+  // Pre-check: split locally and show preview
+  const chunks = splitIntoChunks(text);
+  // Count items using same pattern as splitIntoChunks (Arabic + Chinese numerals)
+  const CN_NUM = '[一二三四五六七八九十]+';
+  const AR_NUM = '\\d{1,3}';
+  const itemRe = new RegExp(`^(${CN_NUM}|${AR_NUM})[、.）\\)]\\s`, 'gm');
+  const estimatedItems = (text.match(itemRe) || []).length;
+  const estimatedTokens = chunks.length * 4000; // rough estimate per chunk
+
+  panel.style.display = 'none';
+  summary.style.display = '';
+  summary.innerHTML = `
+    <div class="ai-summary-header">📋 预检结果</div>
+    <div class="ai-summary-cards">
+      <div class="ai-summary-card" style="border-left-color:var(--primary);">
+        <div class="ai-summary-card-title">📝 检测到约 <strong>${estimatedItems || '?'}</strong> 个知识点 <span style="font-size:.72rem;color:var(--text-muted);cursor:pointer;font-weight:400;" onclick="togglePreCheckOriginal()">（查看原文）</span></div>
+        <div class="ai-summary-card-meta">
+          <span style="font-size:.82rem;color:var(--text-secondary);">输入文本 ${text.length} 字${chunks.length > 1 ? `，将自动分 ${chunks.length} 次调用 API（每批≤12条，防止溢出）` : '，单次调用即可完成'}</span>
+        </div>
+        <div class="ai-summary-card-meta" style="margin-top:4px;">
+          <span style="font-size:.78rem;color:var(--text-muted);">预计消耗约 ${estimatedTokens} token${chunks.length > 1 ? ` · 整个过程约需 ${chunks.length * 15}-${chunks.length * 30} 秒` : ''}</span>
+        </div>
+        <div id="preCheckOriginal" style="display:none;margin-top:10px;padding:10px;background:var(--bg);border-radius:var(--radius-sm);max-height:200px;overflow-y:auto;font-size:.78rem;line-height:1.6;white-space:pre-wrap;color:var(--text-secondary);">${escapeHtml(text)}</div>
+      </div>
+    </div>
+    <p id="preCheckWarning" style="margin-top:12px;font-size:.8rem;color:var(--warning);display:none;">⚠️ 未检测到清晰的序号结构，AI 可能无法正确拆分知识点。建议为每条知识点添加序号（如"1、""2."）。</p>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn btn-primary btn-lg" id="confirmGenerateBtn" onclick="confirmGenerate()">🚀 开始生成</button>
+      <button class="btn btn-ghost" onclick="clearPending()">取消</button>
+    </div>
+  `;
+
+  if (!estimatedItems || estimatedItems < 1) {
+    document.getElementById('preCheckWarning').style.display = '';
+  }
+
+  _pendingText = text;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ 请先确认预检结果';
+  status.innerHTML = '';
+
+  // Clear pending text if user modifies input (cancel pre-check silently)
+  document.getElementById('pasteText').addEventListener('input', clearPending, { once: true });
+  document.getElementById('fileInput').addEventListener('change', clearPending, { once: true });
+}
+
+function clearPending() {
+  _pendingText = null;
+  const btn = document.getElementById('aiGenerateBtn');
+  btn.disabled = false;
+  btn.innerHTML = '🚀 AI 生成题目';
+  document.getElementById('aiSummary').style.display = 'none';
+}
+
+function confirmGenerate() {
+  document.getElementById('aiGenerateBtn').disabled = false;
+  document.getElementById('aiGenerateBtn').innerHTML = '🚀 AI 生成题目';
+  aiGenerate(); // will hit Phase 2 since _pendingText is set
+}
+
+async function doGenerate(text) {
   const btn = document.getElementById('aiGenerateBtn');
   const status = document.getElementById('aiStatus');
   const panel = document.getElementById('aiProgressPanel');
-  const streamOut = document.getElementById('streamOutput');
   const streamContent = document.getElementById('streamContent');
   const summary = document.getElementById('aiSummary');
+  const streamOut = document.getElementById('streamOutput');
 
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> AI 正在生成题目...';
@@ -1474,34 +1701,62 @@ async function aiGenerate() {
     if (id === 'stageAnalyze') document.getElementById(id).className = 'ai-stage active';
   });
 
-  let kpCount = 0, hasChoice = false, hasFill = false, hasShort = false;
+  let kpCount = 0;
 
   try {
-    const result = await callDeepSeekAPI(text, (accumulated) => {
-      // Parse progress from streaming JSON
-      const kpMatches = accumulated.match(/"id"\s*:\s*"kp_/g);
-      if (kpMatches && kpMatches.length > kpCount) {
-        kpCount = kpMatches.length;
-        document.getElementById('stageAnalyze').className = 'ai-stage done';
+    const chunks = splitIntoChunks(text);
+    const isChunked = chunks.length > 1;
+    if (isChunked) {
+      document.getElementById('aiProgressTitle').textContent = `🤖 AI 正在生成题目...（共 ${chunks.length} 批）`;
+    }
+
+    let allNewKPs = [];
+
+    for (let ci = 0; ci < chunks.length; ci++) {
+      const chunk = chunks[ci];
+      const chunkLabel = isChunked ? `第${ci + 1}/${chunks.length}批` : '';
+
+      let chunkKpCount = 0, chunkHasChoice = false, chunkHasFill = false, chunkHasShort = false;
+
+      const result = await callDeepSeekAPI(chunk, (accumulated) => {
+        const kpMatches = accumulated.match(/"id"\s*:\s*"kp_/g);
+        if (kpMatches && kpMatches.length > chunkKpCount) {
+          chunkKpCount = kpMatches.length;
+          document.getElementById('stageAnalyze').className = 'ai-stage done';
+        }
+        if (!chunkHasChoice && accumulated.includes('"choice"')) {
+          chunkHasChoice = true; document.getElementById('stageChoice').className = 'ai-stage active';
+        }
+        if (accumulated.includes('"fill_blank"') && !chunkHasFill) {
+          chunkHasFill = true; document.getElementById('stageChoice').className = 'ai-stage done';
+          document.getElementById('stageFill').className = 'ai-stage active';
+        }
+        if (accumulated.includes('"short_answer"') && !chunkHasShort) {
+          chunkHasShort = true; document.getElementById('stageFill').className = 'ai-stage done';
+          document.getElementById('stageShort').className = 'ai-stage active';
+        }
+        const overallPct = Math.round(((ci + Math.min(0.9, accumulated.length / Math.max(accumulated.length + 600, 2000))) / chunks.length) * 100);
+        document.getElementById('aiProgressFill').style.width = Math.min(95, overallPct) + '%';
+        document.getElementById('aiProgressText').textContent = chunkLabel
+          ? `${chunkLabel} · 已识别 ${chunkKpCount} 个知识点 · ${accumulated.length} 字符`
+          : `已识别 ${chunkKpCount} 个知识点 · ${accumulated.length} 字符`;
+        streamContent.textContent = accumulated;
+      });
+
+      const chunkKPs = parseAIResult(result);
+      if (chunkKPs.length === 0 && chunks.length === 1) {
+        throw new Error('AI 未能生成有效题目，请检查知识点文本格式');
       }
-      if (!hasChoice && accumulated.includes('"choice"')) {
-        hasChoice = true; document.getElementById('stageChoice').className = 'ai-stage active';
+      allNewKPs = allNewKPs.concat(chunkKPs);
+      kpCount += chunkKPs.length;
+      // Save partial progress so tokens aren't wasted if later chunks fail
+      if (chunkKPs.length > 0 && isChunked) {
+        assignBatches(chunkKPs);
+        proj().kps = proj().kps.concat(chunkKPs);
+        saveData(data);
+        document.getElementById('aiProgressText').textContent = `${chunkLabel} 完成，已保存（共 ${kpCount} 个知识点）...`;
       }
-      if (accumulated.includes('"fill_blank"') && !hasFill) {
-        hasFill = true; document.getElementById('stageChoice').className = 'ai-stage done';
-        document.getElementById('stageFill').className = 'ai-stage active';
-      }
-      if (accumulated.includes('"short_answer"') && !hasShort) {
-        hasShort = true; document.getElementById('stageFill').className = 'ai-stage done';
-        document.getElementById('stageShort').className = 'ai-stage active';
-      }
-      const pct = Math.min(92, Math.round((accumulated.length / Math.max(accumulated.length + 600, 2500)) * 100));
-      document.getElementById('aiProgressFill').style.width = pct + '%';
-      document.getElementById('aiProgressText').textContent = kpCount > 0
-        ? `已识别 ${kpCount} 个知识点 · 已生成 ${accumulated.length} 字符`
-        : `正在分析知识点... ${accumulated.length} 字符`;
-      streamContent.textContent = accumulated;
-    });
+    }
 
     document.getElementById('aiProgressFill').style.width = '100%';
     document.getElementById('aiProgressText').textContent = '生成完成，正在解析...';
@@ -1510,19 +1765,20 @@ async function aiGenerate() {
       document.getElementById(id).className = 'ai-stage done';
     });
 
-    const newKPs = parseAIResult(result);
-    if (newKPs.length === 0) throw new Error('AI 未能生成有效题目，请检查知识点文本格式');
-    assignBatches(newKPs);
-    proj().kps = proj().kps.concat(newKPs);
-    saveData(data);
+    if (allNewKPs.length === 0) throw new Error('AI 未能生成有效题目，请检查知识点文本格式');
+    // For chunked generation, KPs were already saved per-chunk; only save here for single-chunk
+    if (!isChunked) {
+      assignBatches(allNewKPs);
+      proj().kps = proj().kps.concat(allNewKPs);
+      saveData(data);
+    }
 
-    // Build summary cards
-    const totalQ = newKPs.reduce((s, kp) => s + (kp.questions.choice?.length||0) + (kp.questions.fill_blank?.length||0) + (kp.questions.short_answer?.length||0), 0);
-    // Calculate batch info for summary
-    const batches = [...new Set(newKPs.map(kp => kp.batch))];
+    const displayKPs = allNewKPs.slice(0, 15);
+    const totalQ = allNewKPs.reduce((s, kp) => s + (kp.questions.choice?.length||0) + (kp.questions.fill_blank?.length||0) + (kp.questions.short_answer?.length||0), 0);
+    const batches = [...new Set(allNewKPs.map(kp => kp.batch))];
     const batchInfo = batches.length > 1 ? `，分为第${batches[0]}-${batches[batches.length-1]}批` : `，第${batches[0] || 1}批`;
-    let html = `<div class="ai-summary-header">✅ 成功生成 <strong>${newKPs.length}</strong> 个知识点，共 <strong>${totalQ}</strong> 道题${batchInfo}，已导入"${escapeHtml(proj().name)}"<br><span style="font-size:.75rem;color:var(--text-muted);">📥 备份文件已自动下载，每批${BATCH_SIZE}个知识点，逐批解锁刷题</span></div><div class="ai-summary-cards">`;
-    newKPs.forEach(kp => {
+    let html = `<div class="ai-summary-header">✅ 成功生成 <strong>${allNewKPs.length}</strong> 个知识点，共 <strong>${totalQ}</strong> 道题${batchInfo}，已导入"${escapeHtml(proj().name)}"${isChunked ? `<br><span style="font-size:.75rem;color:var(--text-muted);">（分 ${chunks.length} 次调用 API 完成）</span>` : ''}<br><span style="font-size:.75rem;color:var(--text-muted);">📥 备份文件已自动下载，每批${BATCH_SIZE}个知识点，逐批解锁刷题</span></div><div class="ai-summary-cards">`;
+    displayKPs.forEach(kp => {
       const cQ = kp.questions.choice?.length || 0;
       const fQ = kp.questions.fill_blank?.length || 0;
       const sQ = kp.questions.short_answer?.length || 0;
@@ -1537,19 +1793,22 @@ async function aiGenerate() {
         ${tags ? `<div class="ai-summary-card-tags">角度：${escapeHtml(tags)}</div>` : ''}
       </div>`;
     });
+    if (allNewKPs.length > 15) {
+      html += `<p style="text-align:center;color:var(--text-muted);font-size:.8rem;">...以及其他 ${allNewKPs.length - 15} 个知识点</p>`;
+    }
     html += '</div>';
     summary.innerHTML = html;
     summary.style.display = '';
     setTimeout(() => { panel.style.display = 'none'; }, 2500);
 
     document.getElementById('pasteText').value = '';
-    fileInput.value = '';
+    document.getElementById('fileInput').value = '';
     status.innerHTML = '';
     renderBank();
     renderStudy();
     updateTopBar();
     autoBackup();
-    toast(`导入完成！${newKPs.length} 个知识点已加入"${proj().name}"（已自动备份）`, 'success');
+    toast(`导入完成！${allNewKPs.length} 个知识点已加入"${proj().name}"（已自动备份）`, 'success');
   } catch (e) {
     status.innerHTML = `❌ ${e.message}`;
     status.style.color = 'var(--danger)';
@@ -1560,6 +1819,7 @@ async function aiGenerate() {
     btn.disabled = false;
     btn.innerHTML = '🚀 AI 生成题目';
   }
+}
 }
 
 function manualImport() {
@@ -1611,7 +1871,19 @@ function importData(event) {
   reader.onload = function() {
     try {
       const imported = JSON.parse(reader.result);
-      // Handle both old format (flat kps) and new format (projects)
+      // Detect multi-project backup
+      if (imported.projects && imported.projects.length > 1) {
+        if (confirm(`检测到 ${imported.projects.length} 个项目的完整备份。\n\n"确定"=恢复全部项目（覆盖当前数据）\n"取消"=仅将题目合并到当前项目"${proj().name}"`)) {
+          data.projects = imported.projects;
+          data.activeProjectId = imported.activeProjectId || imported.projects[0].id;
+          data.currentKP = null; data.currentQuestion = null;
+          saveData(data);
+          renderBank(); renderStudy(); updateTopBar();
+          toast(`${imported.projects.length} 个项目已恢复`, 'success');
+          return;
+        }
+      }
+      // Merge into current project
       let importKPs;
       if (imported.projects) {
         importKPs = imported.projects.reduce((s, p) => s.concat(p.kps || []), []);
@@ -1620,14 +1892,13 @@ function importData(event) {
       } else {
         throw new Error('格式不正确');
       }
-      if (!confirm(`确认导入 ${importKPs.length} 个知识点到当前项目"${proj().name}"？`)) return;
-      proj().kps = importKPs;
+      if (!confirm(`确认将 ${importKPs.length} 个知识点导入到当前项目"${proj().name}"？`)) return;
+      assignBatches(importKPs);
+      proj().kps = proj().kps.concat(importKPs);
       proj().coolingPool = [];
-      proj().lastKilled = null;
-      proj()._celebrated = false;
       saveData(data);
       renderBank(); renderStudy(); updateTopBar();
-      toast('题库导入成功', 'success');
+      toast(`已导入 ${importKPs.length} 个知识点`, 'success');
     } catch (e) {
       toast('导入失败：文件格式不正确', 'error');
     }
@@ -1721,6 +1992,17 @@ function toggleStream() {
   }
 }
 
+function toggleReviewMode(on) {
+  proj().reviewMode = on;
+  saveData(data);
+  if (on) {
+    toast('回顾模式已开启，所有批次的知识点均可刷到', 'info');
+  } else {
+    toast('已切回正常模式，仅当前批次可刷', 'info');
+  }
+  renderStudy();
+}
+
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelector(`[data-tab="${name}"]`).classList.add('active');
@@ -1731,6 +2013,7 @@ function switchTab(name) {
   if (name === 'settings') {
     document.getElementById('apiKeyInput').value = settings.apiKey || '';
     document.getElementById('modelSelect').value = settings.model || 'deepseek-chat';
+    document.getElementById('reviewModeToggle').checked = proj().reviewMode || false;
   }
 }
 
@@ -1807,15 +2090,21 @@ function init() {
         (kp.questions[t] || []).forEach(q => { if (!q.id) q.id = uid(); if (q.streak === undefined) q.streak = 0; });
       });
     });
-    // Ensure project has stats/coolingPool/lastKilled/batch
+    // Ensure project has all required fields
     if (!project.stats) project.stats = { today: todayStr, count: 0, correct: 0, attempts: 0 };
     if (!project.coolingPool) project.coolingPool = [];
     if (project.lastKilled === undefined) project.lastKilled = null;
     if (project._celebrated === undefined) project._celebrated = false;
     if (!project.activeBatch) project.activeBatch = 1;
-    // Ensure all KPs have batch numbers
+    if (project.reviewMode === undefined) project.reviewMode = false;
+    // Ensure all KPs have batch/respawn fields, migrate old killed->hidden
     (project.kps || []).forEach((kp, i) => {
       if (!kp.batch) kp.batch = Math.floor(i / BATCH_SIZE) + 1;
+      if (kp.killed !== undefined && kp.hidden === undefined) kp.hidden = kp.killed;
+      if (kp.hidden === undefined) kp.hidden = false;
+      if (!kp.killedAt) kp.killedAt = null;
+      if (!kp.respawnDays) kp.respawnDays = RESPAWN_DAYS;
+      delete kp.killed;
     });
   });
 
