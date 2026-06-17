@@ -10,8 +10,9 @@ An AI-powered memory reinforcement tool built on cognitive science. Upload your 
 - **🔪 Kill & Respawn** — "Kill" mastered items to hide them; auto-respawn after 48 hours for reinforcement
 - **📁 Multi-Project Support** — Independent question banks per subject, no cross-contamination
 - **🧩 Batched Practice** — 10 knowledge points per batch, unlock progressively to avoid fatigue
+- **⭐ Understand-Only & Wrong Book** — Mark low-priority items for quick review; collect mistakes in a dedicated mode for focused practice
 - **📡 Live AI Progress** — Streaming output, progress bar, stage indicators, and card-based result preview
-- **🔍 Pre-Check Panel** — Free local preview before generation: item count, chunk plan, token estimate — confirm before spending API credits
+- **🔍 Pre-Check Panel** — Free local preview: item count, chunk plan, token estimate, image detection — confirm before spending API credits
 - **📥 Auto-Backup** — Automatic `.json` backup download on every import; never lose data to a browser cache clear
 
 ## 🚀 Quick Start

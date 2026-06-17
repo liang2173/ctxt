@@ -54,7 +54,30 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 .badge-short { background: var(--success-light); color: #065f46; }
 .question-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
 .question-tag { font-size: .7rem; padding: 2px 8px; border-radius: 4px; background: var(--bg); color: var(--text-muted); }
-.question-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.question-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
+/* Question action icons */
+.qp-understand-wrap { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.qp-icon-wrap { position: relative; display: flex; align-items: center; }
+.qp-understand-btn, .qp-star-btn { width: 22px; height: 22px; border-radius: 50%; border: 1.5px dashed var(--text-muted); background: none; cursor: pointer; opacity: .45; transition: all .2s; font-size: .65rem; font-weight: 700; color: var(--text-muted); display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; }
+.qp-star-btn { font-size: .7rem; }
+.qp-understand-btn:hover, .qp-star-btn:hover { opacity: 1; border-color: var(--warning); }
+.qp-understand-btn:hover { background: var(--warning-light); }
+.qp-star-btn:hover { color: var(--warning); }
+.qp-understand-btn.flagged { opacity: .8; border-style: solid; border-color: var(--warning); background: var(--warning-light); }
+.qp-star-btn.starred { opacity: .8; border-style: solid; border-color: var(--warning); color: var(--warning); background: var(--warning-light); }
+.qp-icon-tip { position: absolute; right: 30px; top: 50%; transform: translateY(-50%); background: var(--text); color: #fff; font-size: .7rem; padding: 3px 8px; border-radius: 4px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 10; }
+.qp-icon-wrap:hover .qp-icon-tip { opacity: 1; }
+.qp-badge-understand { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: .7rem; font-weight: 600; background: #fef3c7; color: #92400e; margin-left: 6px; }
+
+/* Mode tabs */
+.mode-tabs { display: flex; gap: 2px; margin-bottom: 16px; }
+.mode-tab { padding: 6px 14px; border: 1px solid var(--border); background: var(--card); border-radius: var(--radius-sm); font-size: .82rem; cursor: pointer; color: var(--text-secondary); transition: all .15s; }
+.mode-tab:hover { border-color: var(--primary); color: var(--primary); }
+.mode-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.mode-subtabs { display: flex; gap: 2px; margin-bottom: 12px; margin-left: 4px; }
+.mode-subtab { padding: 4px 12px; border: none; background: none; font-size: .78rem; cursor: pointer; color: var(--text-muted); border-radius: var(--radius-sm); transition: all .15s; }
+.mode-subtab:hover { color: var(--primary); }
+.mode-subtab.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
 .question-level { font-size: .8rem; color: var(--text-muted); }
 .question-text { font-size: 1.2rem; font-weight: 600; line-height: 1.8; margin-bottom: 24px; color: var(--text); }
 
@@ -247,6 +270,22 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 
 <!-- Study View -->
 <div id="view-study" class="view">
+  <!-- Mode tabs -->
+  <div class="mode-tabs" id="modeTabs">
+    <button class="mode-tab active" data-mode="normal" onclick="setStudyMode('normal')">全部题目</button>
+    <button class="mode-tab" data-mode="wrongbook" onclick="setStudyMode('wrongbook')">★ 错题本</button>
+    <button class="mode-tab" data-mode="understand" onclick="setStudyMode('understand')">! 仅了解</button>
+  </div>
+  <!-- Wrongbook sub-tabs -->
+  <div class="mode-subtabs" id="wrongbookSubtabs" style="display:none;">
+    <button class="mode-subtab active" data-sub="active" onclick="setWrongbookSub('active')">待攻克</button>
+    <button class="mode-subtab" data-sub="mastered" onclick="setWrongbookSub('mastered')">已攻克</button>
+  </div>
+  <!-- Understand-only list -->
+  <div class="card" id="understandList" style="display:none;margin-bottom:16px;">
+    <p style="text-align:center;color:var(--text-muted);padding:16px;" id="understandListMsg">暂无仅了解的知识点</p>
+    <div id="understandListItems"></div>
+  </div>
   <!-- No questions state -->
   <div class="card" id="emptyState" style="text-align:center;">
     <div style="font-size:3rem;margin-bottom:12px;">📖</div>
@@ -260,6 +299,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
     <div class="question-meta">
       <span class="question-type-badge" id="qBadge"></span>
       <span class="question-level" id="qLevel"></span>
+      <div class="qp-understand-wrap" id="qpUnderstandWrap" style="display:none;">
+        <div class="qp-icon-wrap">
+          <button class="qp-understand-btn" id="qpUnderstandBtn" onclick="toggleUnderstandOnly()">!</button>
+          <span class="qp-icon-tip" id="qpUnderstandTip">标记为了解型</span>
+        </div>
+        <div class="qp-icon-wrap">
+          <button class="qp-star-btn" id="qpStarBtn" onclick="toggleWrongBook()">☆</button>
+          <span class="qp-icon-tip" id="qpStarTip">加入错题本</span>
+        </div>
+      </div>
     </div>
     <div class="question-tags" id="qTags"></div>
     <div class="question-text" id="qText"></div>
@@ -455,6 +504,59 @@ function escapeHtml(s) { const d = document.createElement('div'); d.textContent 
 // 2. DOCX PARSER (minimal, zero-dependency)
 // ──────────────────────────────────────
 const DocxParser = {
+  // Helper: decompress a deflate-raw buffer to string
+  async _inflate(compData) {
+    const ds = new DecompressionStream('deflate-raw');
+    const writer = ds.writable.getWriter();
+    writer.write(compData);
+    writer.close();
+    const reader = ds.readable.getReader();
+    const chunks = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    const total = chunks.reduce((s, c) => s + c.length, 0);
+    const decomp = new Uint8Array(total);
+    let o = 0;
+    for (const c of chunks) { decomp.set(c, o); o += c.length; }
+    return new TextDecoder().decode(decomp);
+  },
+
+  // Parse numbering.xml to map numId -> ilvl -> format string
+  _parseNumbering(xmlStr) {
+    const map = {}; // { numId: { ilvl: format } }
+    const xmlDoc = new DOMParser().parseFromString(xmlStr, 'text/xml');
+    const NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    // Build abstractNumId -> ilvl -> lvlText map
+    const abstractMap = {};
+    const absNums = xmlDoc.getElementsByTagNameNS(NS, 'abstractNum');
+    for (const an of absNums) {
+      const absId = an.getAttributeNS(NS, 'abstractNumId') || an.getAttribute('w:abstractNumId');
+      const lvlMap = {};
+      const lvls = an.getElementsByTagNameNS(NS, 'lvl');
+      for (const lvl of lvls) {
+        const ilvl = (lvl.getAttributeNS(NS, 'ilvl') || lvl.getAttribute('w:ilvl') || '0');
+        const lvlText = lvl.getElementsByTagNameNS(NS, 'lvlText')[0];
+        const val = lvlText ? (lvlText.getAttributeNS(NS, 'val') || lvlText.getAttribute('w:val') || '%1.') : '%1.';
+        lvlMap[ilvl] = val;
+      }
+      abstractMap[absId] = lvlMap;
+    }
+    // Map numId -> abstractNumId
+    const nums = xmlDoc.getElementsByTagNameNS(NS, 'num');
+    for (const num of nums) {
+      const numId = num.getAttributeNS(NS, 'numId') || num.getAttribute('w:numId');
+      const ref = num.getElementsByTagNameNS(NS, 'abstractNumId')[0];
+      const absId = ref ? (ref.getAttributeNS(NS, 'val') || ref.getAttribute('w:val')) : null;
+      if (absId && abstractMap[absId]) {
+        map[numId] = abstractMap[absId];
+      }
+    }
+    return map;
+  },
+
   async extractText(file) {
     const buf = await file.arrayBuffer();
     const view = new DataView(buf);
@@ -469,7 +571,8 @@ const DocxParser = {
 
     const cdOff = view.getUint32(eocdOff + 16, true);
     const cdSize = view.getUint32(eocdOff + 12, true);
-    let docOff, docCSize, docMethod;
+    let docOff, docCSize, docMethod, numOff, numCSize, numMethod;
+    let imageCount = 0;
     let pos = cdOff;
     const cdEnd = cdOff + cdSize;
     while (pos < cdEnd) {
@@ -489,46 +592,74 @@ const DocxParser = {
         docOff = lp + 30 + lfnLen + lexLen;
         docCSize = cSize;
         docMethod = method;
-        break;
+      }
+      if (fn === 'word/numbering.xml') {
+        let lp = localOff;
+        const lfnLen = view.getUint16(lp + 26, true);
+        const lexLen = view.getUint16(lp + 28, true);
+        numOff = lp + 30 + lfnLen + lexLen;
+        numCSize = cSize;
+        numMethod = method;
+      }
+      if (fn.startsWith('word/media/') && /\.(png|jpg|jpeg|gif|bmp|svg|webp)$/i.test(fn)) {
+        imageCount++;
       }
       pos += 46 + fnLen + extraLen + commentLen;
     }
     if (docOff === undefined) throw new Error('DOCX 中未找到 word/document.xml');
 
-    const compData = new Uint8Array(buf, docOff, docCSize);
-    let xmlStr;
-    if (docMethod === 8) {
-      const ds = new DecompressionStream('deflate-raw');
-      const writer = ds.writable.getWriter();
-      writer.write(compData);
-      writer.close();
-      const reader = ds.readable.getReader();
-      const chunks = [];
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-      }
-      const total = chunks.reduce((s, c) => s + c.length, 0);
-      const decomp = new Uint8Array(total);
-      let o = 0;
-      for (const c of chunks) { decomp.set(c, o); o += c.length; }
-      xmlStr = new TextDecoder().decode(decomp);
-    } else {
-      xmlStr = new TextDecoder().decode(compData);
+    // Decompress document.xml
+    const docComp = new Uint8Array(buf, docOff, docCSize);
+    const docXmlStr = docMethod === 8 ? await this._inflate(docComp) : new TextDecoder().decode(docComp);
+
+    // Parse numbering.xml if present
+    let numFormatMap = {};
+    if (numOff !== undefined) {
+      const numComp = new Uint8Array(buf, numOff, numCSize);
+      const numXmlStr = numMethod === 8 ? await this._inflate(numComp) : new TextDecoder().decode(numComp);
+      numFormatMap = this._parseNumbering(numXmlStr);
     }
 
-    const xmlDoc = new DOMParser().parseFromString(xmlStr, 'text/xml');
     const NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const xmlDoc = new DOMParser().parseFromString(docXmlStr, 'text/xml');
     const paras = xmlDoc.getElementsByTagNameNS(NS, 'p');
     const result = [];
+    // Track per-list counters for auto-numbering
+    const listCounters = {}; // { numId: { ilvl: count } }
+
     for (const p of paras) {
+      // Check for auto-numbering
+      const numPr = p.getElementsByTagNameNS(NS, 'numPr')[0];
+      let autoNum = '';
+      if (numPr) {
+        const numIdEl = numPr.getElementsByTagNameNS(NS, 'numId')[0];
+        const ilvlEl = numPr.getElementsByTagNameNS(NS, 'ilvl')[0];
+        const numId = numIdEl ? (numIdEl.getAttributeNS(NS, 'val') || numIdEl.getAttribute('w:val')) : null;
+        const ilvl = ilvlEl ? (ilvlEl.getAttributeNS(NS, 'val') || ilvlEl.getAttribute('w:val') || '0') : '0';
+        if (numId) {
+          if (!listCounters[numId]) listCounters[numId] = {};
+          if (!listCounters[numId][ilvl]) listCounters[numId][ilvl] = 0;
+          listCounters[numId][ilvl]++;
+          const count = listCounters[numId][ilvl];
+          const fmtMap = numFormatMap[numId];
+          const lvlFmt = (fmtMap && fmtMap[ilvl]) ? fmtMap[ilvl] : '%1.';
+          autoNum = lvlFmt.replace('%1', count);
+        }
+      } else {
+        // Reset counters when encountering non-numbered paragraph? No — keep them.
+      }
+
       const tNodes = p.getElementsByTagNameNS(NS, 't');
       let txt = '';
       for (const t of tNodes) { txt += t.textContent || ''; }
-      if (txt.trim()) result.push(txt.trim());
+      if (txt.trim()) {
+        result.push(autoNum ? autoNum + txt.trim() : txt.trim());
+      } else if (autoNum) {
+        // Auto-numbered paragraph with no text (e.g. just the number)
+        result.push(autoNum);
+      }
     }
-    return result.join('\n\n');
+    return { text: result.join('\n\n'), imageCount: imageCount };
   }
 };
 
@@ -619,8 +750,11 @@ const FORGOT_WEIGHT = 80;  // "我忘了"的权重惩罚（vs 答错 +50）
 function getLevelOrder(kp) {
   const levels = [];
   if (kp.questions.choice && kp.questions.choice.length > 0) levels.push('choice');
-  if (kp.questions.fill_blank && kp.questions.fill_blank.length > 0) levels.push('fill_blank');
-  if (kp.questions.short_answer && kp.questions.short_answer.length > 0) levels.push('short_answer');
+  // 了解型知识点：做完选择题直接掌握，跳过填空和简答
+  if (!kp.understandOnly) {
+    if (kp.questions.fill_blank && kp.questions.fill_blank.length > 0) levels.push('fill_blank');
+    if (kp.questions.short_answer && kp.questions.short_answer.length > 0) levels.push('short_answer');
+  }
   return levels;
 }
 
@@ -648,12 +782,26 @@ function selectNextQuestion() {
   });
   if (respawned) saveData(data);
 
-  // Filter: not hidden, not mastered, in current batch (or reviewMode = all batches)
-  const batchFilter = p.reviewMode ? () => true : (kp => (kp.batch || 1) === activeBatch);
-  const allAvailable = p.kps.filter(kp => !kp.hidden && kp.currentLevel !== 'mastered' && batchFilter(kp));
+  // Apply study mode filter
+  let baseKPs = p.kps.filter(kp => !kp.hidden && kp.currentLevel !== 'mastered');
 
-  // If current batch is complete but more batches exist, auto-advance
-  if (allAvailable.length === 0 && !p.reviewMode) {
+  if (studyMode === 'wrongbook') {
+    baseKPs = baseKPs.filter(kp => kp.inWrongBook);
+    if (wrongbookSub === 'mastered') {
+      baseKPs = baseKPs.filter(kp => (kp.wrongCycles || 0) > 0);
+    } else {
+      baseKPs = baseKPs.filter(kp => !kp.wrongCycles || kp.wrongCycles === 0);
+    }
+  }
+
+  if (studyMode === 'understand') return null;
+
+  // Batch filter (skip in wrongbook/understand mode)
+  const batchFilter = (studyMode !== 'normal' || p.reviewMode) ? () => true : (kp => (kp.batch || 1) === activeBatch);
+  const allAvailable = baseKPs.filter(batchFilter);
+
+  // If current batch is complete but more batches exist, auto-advance (only in normal mode)
+  if (allAvailable.length === 0 && studyMode === 'normal' && !p.reviewMode) {
     const maxBatch = Math.max(...p.kps.map(k => k.batch || 1), 1);
     if (activeBatch < maxBatch) {
       p.activeBatch = activeBatch + 1;
@@ -740,6 +888,7 @@ function processAnswer(isCorrect, isForgot) {
         toast(`知识点晋级到${levelLabel(nextLvl)}！新的考查角度即将出现`, 'success');
       } else {
         kp.currentLevel = 'mastered';
+        if (kp.inWrongBook) { kp.wrongCycles = (kp.wrongCycles || 0) + 1; kp._wrongJustMastered = true; }
         toast('🎉 知识点已掌握！', 'success');
       }
     }
@@ -752,6 +901,8 @@ function processAnswer(isCorrect, isForgot) {
     }
   }
   kp._wasCorrectBefore = kp._wasCorrectBefore || isCorrect;
+  // Track wrongbook cycle mastery
+  if (kp.inWrongBook && !isCorrect >= false) { /* just a marker, tracking below */ }
   saveData(data);
 }
 
@@ -979,7 +1130,10 @@ function parseAIResult(aiResult) {
       weight: 100,
       hidden: false,
       killedAt: null,
-      _wasCorrectBefore: false
+      _wasCorrectBefore: false,
+      understandOnly: false,
+      inWrongBook: false,
+      wrongCycles: 0
     };
     // Set initial level to first available
     const order = getLevelOrder(kp);
@@ -1154,11 +1308,15 @@ function renderStudy() {
   }
 
   // Render question
-  const typeLabel = questionTypeLabel(q.type);
+  const typeLabel = questionTypeLabel(q.type) + (kp.understandOnly ? ' (了解)' : '');
   document.getElementById('qBadge').textContent = typeLabel;
   document.getElementById('qBadge').className = 'question-type-badge ' + badgeClass(q.type);
+  if (kp.understandOnly) document.getElementById('qBadge').classList.add('qp-badge-understand');
   const qStreak = q.streak || 0; const levelQCount = (kp.questions[kp.currentLevel] || []).length; const doneCount = (kp.questions[kp.currentLevel] || []).filter(q => (q.streak || 0) >= STREAK_TO_ADVANCE).length; document.getElementById('qLevel').textContent = `本题连对 ${qStreak}/${STREAK_TO_ADVANCE} · 本题型进度 ${doneCount}/${levelQCount}`;
   document.getElementById('qTags').innerHTML = kp.tags.map(t => `<span class="question-tag">${escapeHtml(t)}</span>`).join('');
+
+  // Update button states
+  updateKPButtons();
 
   // 如果知识点刚晋级到新题型，显示过渡提示
   if (kp._justAdvanced) {
@@ -1245,6 +1403,11 @@ function submitAnswer(isForgot) {
       const isCorrect = checkFillAnswer(userAns, q.answer);
       showFeedback(isCorrect, q.explanation, q.answer);
       processAnswer(isCorrect);
+      // Add self-assess appeal for wrong fill_blank answers
+      if (!isCorrect) {
+        const fb = document.getElementById('feedback');
+        fb.innerHTML += `<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(0,0,0,.08);font-size:.78rem;color:var(--text-muted);">认为机器判错了？<span style="color:var(--primary);cursor:pointer;" onclick="appealFillBlank()">我认为答对了</span></div>`;
+      }
     }
     document.getElementById('postActions').style.display = '';
     document.getElementById('nextBtn').focus();
@@ -1259,8 +1422,16 @@ function submitAnswer(isForgot) {
   updateTopBar();
 }
 
+function appealFillBlank() {
+  // User claims fill-in-the-blank answer was correct despite machine mismatch
+  const q = data.currentQuestion;
+  if (!q) return;
+  showFeedback(true, q.explanation, q.answer);
+  processAnswer(true);
+  toast('已记为答对', 'info');
+}
+
 function selfAssessClaim() {
-  // User claims their answer was correct
   selfAssess(true, false);
 }
 
@@ -1387,10 +1558,14 @@ function updateProjectSelect() {
 
 function checkFillAnswer(userAns, correctAns) {
   const u = userAns.replace(/\s+/g, '').toLowerCase();
-  if (!u) return false;  // 空答案直接判错
+  if (!u) return false;
   // Accept multiple correct answers separated by commas or Chinese commas
   const acceptable = correctAns.split(/[,，、]/).map(s => s.replace(/\s+/g, '').toLowerCase());
-  return acceptable.some(a => u === a || u.includes(a) || a.includes(u));
+  // Exact match against any single acceptable answer
+  if (acceptable.some(a => u === a)) return true;
+  // Exact match against the full unsplit answer (for multi-blank questions)
+  if (u === correctAns.replace(/\s+/g, '').toLowerCase()) return true;
+  return false;
 }
 
 function showFeedback(isCorrect, explanation, answer) {
@@ -1403,11 +1578,12 @@ function showFeedback(isCorrect, explanation, answer) {
   if (explanation) {
     fb.innerHTML += `<div class="explanation">${escapeHtml(explanation)}</div>`;
   }
-  // "查看原知识点"按钮
+  // "查看原知识点" + "加入错题本"
   if (kp && kp.content) {
-    fb.innerHTML += `<div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(0,0,0,.1);">
+    fb.innerHTML += `<div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(0,0,0,.1);display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
       <span style="font-size:.78rem;color:var(--primary);cursor:pointer;user-select:none;" onclick="toggleOriginalKP()">📖 查看原知识点 ▾</span>
-      <div id="originalKPContent" style="display:none;margin-top:6px;padding:10px;background:rgba(0,0,0,.03);border-radius:6px;font-size:.82rem;line-height:1.7;color:var(--text);font-weight:400;">
+      <span style="font-size:.78rem;cursor:pointer;user-select:none;${kp.inWrongBook ? 'color:var(--warning);' : 'color:var(--text-muted);'}" onclick="toggleWrongBookFromFeedback()">${kp.inWrongBook ? '★ 移出错题本' : '☆ 加入错题本'}</span>
+      <div id="originalKPContent" style="display:none;margin-top:6px;padding:10px;background:rgba(0,0,0,.03);border-radius:6px;font-size:.82rem;line-height:1.7;color:var(--text);font-weight:400;width:100%;">
         ${escapeHtml(kp.content)}
       </div>
     </div>`;
@@ -1421,6 +1597,133 @@ function togglePreCheckOriginal() {
   } else {
     el.style.display = 'none';
   }
+}
+
+// ── Study mode ──
+let studyMode = 'normal';  // 'normal' | 'wrongbook' | 'understand'
+let wrongbookSub = 'active';  // 'active' | 'mastered'
+
+function setStudyMode(mode) {
+  studyMode = mode;
+  wrongbookSub = 'active';
+  document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`[data-mode="${mode}"]`).classList.add('active');
+  document.getElementById('wrongbookSubtabs').style.display = mode === 'wrongbook' ? '' : 'none';
+  document.getElementById('understandList').style.display = mode === 'understand' ? '' : 'none';
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('doneState').style.display = 'none';
+  document.getElementById('questionCard').style.display = 'none';
+  document.getElementById('modeTabs').style.display = '';
+  document.querySelectorAll('.mode-subtab').forEach(t => t.classList.remove('active'));
+  document.querySelector('[data-sub="active"]').classList.add('active');
+  if (mode === 'understand') renderUnderstandList();
+  else renderStudy();
+}
+
+function setWrongbookSub(sub) {
+  wrongbookSub = sub;
+  document.querySelectorAll('.mode-subtab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`[data-sub="${sub}"]`).classList.add('active');
+  renderStudy();
+}
+
+function renderUnderstandList() {
+  const p = proj();
+  const items = p.kps.filter(k => k.understandOnly && !k.hidden);
+  document.getElementById('understandListMsg').style.display = items.length === 0 ? '' : 'none';
+  const container = document.getElementById('understandListItems');
+  container.innerHTML = items.map(kp => `
+    <div class="kp-item">
+      <div class="kp-info" style="cursor:pointer;" onclick="showKPOriginal('${kp.id}')">
+        <div class="kp-content">${escapeHtml(kp.content || kp.tags.join(' · ') || '(未命名)')}</div>
+        <div class="kp-meta">${levelLabel(kp.currentLevel)} · 权重 ${kp.weight}</div>
+      </div>
+      <div style="flex-shrink:0;">
+        <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();restoreFromUnderstand('${kp.id}')">加入刷题</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function showKPOriginal(kpId) {
+  const kp = proj().kps.find(k => k.id === kpId);
+  if (!kp) return;
+  alert(kp.content || '(无原文)');
+}
+
+function restoreFromUnderstand(kpId) {
+  const kp = proj().kps.find(k => k.id === kpId);
+  if (!kp) return;
+  kp.understandOnly = false;
+  saveData(data);
+  renderUnderstandList();
+  toast('已加入正常刷题队列', 'info');
+}
+
+// ── Understand-only toggle ──
+function toggleUnderstandOnly() {
+  const kp = data.currentKP;
+  if (!kp) return;
+  kp.understandOnly = !kp.understandOnly;
+  saveData(data);
+  updateKPButtons();
+  toast(kp.understandOnly ? '已标记为了解型，选择题完成后直接掌握' : '已取消了解型标记，恢复三级递进', 'info');
+}
+
+// ── Wrong book toggle ──
+function toggleWrongBook() {
+  const kp = data.currentKP;
+  if (!kp) return;
+  kp.inWrongBook = !kp.inWrongBook;
+  if (!kp.inWrongBook) { kp.wrongCycles = 0; kp._wrongJustMastered = false; }
+  saveData(data);
+  updateKPButtons();
+  toast(kp.inWrongBook ? '已加入错题本' : '已移出错题本', 'info');
+}
+
+function updateKPButtons() {
+  const kp = data.currentKP;
+  // Understand button
+  const uBtn = document.getElementById('qpUnderstandBtn');
+  const uTip = document.getElementById('qpUnderstandTip');
+  const wrap = document.getElementById('qpUnderstandWrap');
+  if (!kp || !uBtn) return;
+  wrap.style.display = '';
+  if (kp.understandOnly) {
+    uBtn.classList.add('flagged');
+    uTip.textContent = '已标记为仅了解，点击取消';
+  } else {
+    uBtn.classList.remove('flagged');
+    uTip.textContent = '标记为了解型';
+  }
+  // Star button
+  const sBtn = document.getElementById('qpStarBtn');
+  const sTip = document.getElementById('qpStarTip');
+  if (kp.inWrongBook) {
+    sBtn.classList.add('starred');
+    sBtn.textContent = '★';
+    sTip.textContent = `错题本中${kp.wrongCycles > 0 ? ' (已攻克' + kp.wrongCycles + '次)' : ''}，点击移出`;
+  } else {
+    sBtn.classList.remove('starred');
+    sBtn.textContent = '☆';
+    sTip.textContent = '加入错题本';
+  }
+}
+
+function toggleWrongBookFromFeedback() {
+  const kp = data.currentKP;
+  if (!kp) return;
+  kp.inWrongBook = !kp.inWrongBook;
+  if (!kp.inWrongBook) { kp.wrongCycles = 0; }
+  saveData(data);
+  updateKPButtons();
+  // Just toggle the link text (avoid rebuilding feedback)
+  const links = document.querySelectorAll('#feedback span[onclick*=\"toggleWrongBookFromFeedback\"]');
+  links.forEach(el => {
+    el.style.color = kp.inWrongBook ? 'var(--warning)' : 'var(--text-muted)';
+    el.textContent = kp.inWrongBook ? '★ 移出错题本' : '☆ 加入错题本';
+  });
+  toast(kp.inWrongBook ? '已加入错题本' : '已移出错题本', 'info');
 }
 
 function toggleOriginalKP() {
@@ -1511,6 +1814,9 @@ function resetKP(kpId) {
   kp.hidden = false;
   kp.killedAt = null;
   kp._wasCorrectBefore = false;
+  kp.understandOnly = false;
+  kp.inWrongBook = false;
+  kp.wrongCycles = 0;
   // Reset all question streaks
   ['choice', 'fill_blank', 'short_answer'].forEach(t => {
     (kp.questions[t] || []).forEach(q => { q.streak = 0; });
@@ -1613,11 +1919,14 @@ async function aiGenerate() {
 
   // Phase 1: parse input, run pre-check
   let text = pasteText;
+  let docxImageCount = 0;
   if (fileInput.files.length > 0) {
     const file = fileInput.files[0];
     try {
       if (file.name.endsWith('.docx')) {
-        text = await DocxParser.extractText(file);
+        const parsed = await DocxParser.extractText(file);
+        text = parsed.text;
+        docxImageCount = parsed.imageCount || 0;
       } else {
         text = await file.text();
       }
@@ -1661,6 +1970,10 @@ async function aiGenerate() {
       ${isImagePDF ? `<div class="ai-summary-card" style="border-left-color:var(--danger);background:var(--danger-light);margin-bottom:10px;">
         <div class="ai-summary-card-title" style="color:var(--danger);">⚠️ 检测到图片型 PDF</div>
         <div class="ai-summary-card-meta">此 PDF 无法提取文字内容（仅解析出 ${text.length} 字）。请将内容复制到 Word 或直接粘贴文本后重试。</div>
+      </div>` : ''}
+      ${docxImageCount > 0 ? `<div class="ai-summary-card" style="border-left-color:var(--warning);background:var(--warning-light);margin-bottom:10px;">
+        <div class="ai-summary-card-title" style="color:#92400e;">🖼️ 检测到 ${docxImageCount} 张图片（已跳过）</div>
+        <div class="ai-summary-card-meta">文档中含有图片（可能是 PPT 截图或流程图），其内容无法被 AI 识别。如这些图片包含重要信息，请在编辑原文时补充文字描述，否则相关的知识点可能不完整。</div>
       </div>` : ''}
       <div class="ai-summary-card" style="border-left-color:var(--primary);">
         <div class="ai-summary-card-title">📝 检测到约 <strong>${estimatedItems || '?'}</strong> 个知识点 <span style="font-size:.72rem;color:var(--text-muted);cursor:pointer;font-weight:400;" onclick="togglePreCheckOriginal()">（编辑原文）</span></div>
@@ -2138,6 +2451,9 @@ function init() {
       if (!kp.questions) kp.questions = { choice: [], fill_blank: [], short_answer: [] };
       if (!kp.weight) kp.weight = 100;
       if (kp._wasCorrectBefore === undefined) kp._wasCorrectBefore = false;
+      if (kp.understandOnly === undefined) kp.understandOnly = false;
+      if (kp.inWrongBook === undefined) kp.inWrongBook = false;
+      if (kp.wrongCycles === undefined) kp.wrongCycles = 0;
       ['choice', 'fill_blank', 'short_answer'].forEach(t => {
         (kp.questions[t] || []).forEach(q => { if (!q.id) q.id = uid(); if (q.streak === undefined) q.streak = 0; });
       });
