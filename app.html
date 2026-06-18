@@ -28,6 +28,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 .progress-bar { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
 .progress-fill { height: 100%; background: var(--primary); border-radius: 4px; transition: width .5s ease; }
 .progress-text { font-size: .875rem; color: var(--text-secondary); white-space: nowrap; min-width: 70px; text-align: right; }
+.last-active { font-size: .7rem; color: var(--text-muted); text-align: center; margin-top: 1px; }
 .topbar-right { display: flex; align-items: center; gap: 16px; }
 .topbar-stat { text-align: center; }
 .topbar-stat .num { font-size: 1.1rem; font-weight: 700; color: var(--text); }
@@ -54,6 +55,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 .badge-short { background: var(--success-light); color: #065f46; }
 .question-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
 .question-tag { font-size: .7rem; padding: 2px 8px; border-radius: 4px; background: var(--bg); color: var(--text-muted); }
+.kp-type-progress { font-size: .72rem; color: var(--text-muted); margin-bottom: 12px; display: flex; gap: 2px; align-items: center; flex-wrap: wrap; }
+.kp-type-step { padding: 2px 8px; border-radius: 4px; background: var(--bg); font-weight: 500; white-space: nowrap; }
+.kp-type-step.done { background: var(--success-light); color: #065f46; }
+.kp-type-step.current { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+.kp-type-step.none { opacity: .4; }
 .question-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
 /* Question action icons */
 .qp-understand-wrap { margin-left: auto; display: flex; align-items: center; gap: 4px; }
@@ -229,6 +235,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 @keyframes slideUp { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
 
 /* Responsive */
+.page-footer { text-align: center; padding: 24px 16px 32px; font-size: .75rem; color: var(--text-muted); max-width: 720px; margin: 0 auto; line-height: 1.6; }
+
 @media (max-width: 600px) {
   .topbar { padding: 0 12px; height: 50px; }
   .topbar-center { display: none; }
@@ -252,6 +260,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
       <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
       <span class="progress-text" id="progressText">0/0</span>
     </div>
+    <div class="last-active" id="lastActive" style="display:none;"></div>
   </div>
   <div class="topbar-right">
     <div class="topbar-stat"><div class="num" id="todayCount">0</div><div class="lbl">今日已刷</div></div>
@@ -290,9 +299,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
   <div class="card" id="emptyState" style="text-align:center;">
     <div style="font-size:3rem;margin-bottom:12px;">📖</div>
     <h2 style="margin-bottom:8px;">还没有题目</h2>
-    <p style="color:var(--text-secondary);margin-bottom:20px;">上传知识点文档或粘贴文本，让 AI 帮你生成题目</p>
+    <p style="color:var(--text-secondary);margin-bottom:8px;">上传知识点文档或粘贴文本，让 AI 帮你生成题目</p>
+    <p style="color:var(--text-muted);font-size:.82rem;margin-bottom:20px;">💡 做题是为了记忆，不是为了做对。选对不是终点——试着在脑子里复述一遍完整的定义。</p>
     <button class="btn btn-primary btn-lg" onclick="switchTab('bank')">去导入题目</button>
   </div>
+
+  <!-- Batch summary card -->
+  <div class="card" id="batchSummary" style="display:none;text-align:center;"></div>
 
   <!-- Question card -->
   <div class="card" id="questionCard" style="display:none;">
@@ -311,6 +324,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
       </div>
     </div>
     <div class="question-tags" id="qTags"></div>
+    <div class="kp-type-progress" id="kpTypeProgress"></div>
     <div class="question-text" id="qText"></div>
 
     <!-- Choice options -->
@@ -499,6 +513,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 // ──────────────────────────────────────
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function shuffle(arr) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
 
 // ──────────────────────────────────────
 // 2. DOCX PARSER (minimal, zero-dependency)
@@ -804,10 +819,9 @@ function selectNextQuestion() {
   if (allAvailable.length === 0 && studyMode === 'normal' && !p.reviewMode) {
     const maxBatch = Math.max(...p.kps.map(k => k.batch || 1), 1);
     if (activeBatch < maxBatch) {
-      p.activeBatch = activeBatch + 1;
-      saveData(data);
-      toast(`🎉 第${activeBatch}批已全部掌握！自动进入第${activeBatch + 1}批`, 'success');
-      return selectNextQuestion();
+      // Show batch summary before advancing
+      buildBatchSummary(activeBatch);
+      return null;
     }
     return null;
   }
@@ -873,6 +887,7 @@ function processAnswer(isCorrect, isForgot) {
 
   proj().stats.count++;
   proj().stats.attempts++;
+  proj().lastActiveAt = Date.now();
   if (isCorrect) {
     proj().stats.correct++;
     q.streak = (q.streak || 0) + 1;
@@ -885,6 +900,12 @@ function processAnswer(isCorrect, isForgot) {
       if (nextLvl) {
         kp.currentLevel = nextLvl;
         kp._justAdvanced = true;
+        // Push all new-level questions into cooling pool to avoid immediate same-KP question
+        const nextQs = kp.questions[nextLvl] || [];
+        nextQs.forEach(nq => {
+          proj().coolingPool.push(nq.id);
+          while (proj().coolingPool.length > COOLING_SIZE) proj().coolingPool.shift();
+        });
         toast(`知识点晋级到${levelLabel(nextLvl)}！新的考查角度即将出现`, 'success');
       } else {
         kp.currentLevel = 'mastered';
@@ -904,6 +925,7 @@ function processAnswer(isCorrect, isForgot) {
   // Track wrongbook cycle mastery
   if (kp.inWrongBook && !isCorrect >= false) { /* just a marker, tracking below */ }
   saveData(data);
+  refreshQuestionStats();
 }
 
 function killKP(kpId) {
@@ -966,6 +988,7 @@ const SYSTEM_PROMPT = `你是一个记忆辅助刷题系统的题目生成器。
 - 目标不是考察，而是帮助用户建立牢固的神经连接——每次答题（无论对错）都在加深记忆
 - 同一个知识点从不同角度设问，让用户的大脑从多个通路强化同一信息
 - 选择题干扰项必须来自同领域的其他真实概念——选错的同时也认识了干扰项的概念
+- 四个选项必须互斥，不能出现两个选项描述同一概念或同一数值范围的情况
 - 正确选项不做陷阱式伪装，干扰项不做恶意混淆
 
 ## 答案确定性（最高优先级）
@@ -1027,7 +1050,7 @@ const SYSTEM_PROMPT = `你是一个记忆辅助刷题系统的题目生成器。
             "text": "选择题题目",
             "options": ["A. 选项A", "B. 选项B", "C. 选项C", "D. 选项D"],
             "answer": "A",
-            "explanation": "A是正确答案因为（引用原文）；B选项是……领域的真实概念；C选项……；D选项……（每个干扰项都要有知识拓展价值）"
+            "explanation": "（正确答案）……（引用原文依据）；其他选项：XX是……领域的真实概念；YY是……（每个干扰项都要有知识拓展价值，不依赖字母标识）"
           }
         ],
         "fill_blank": [
@@ -1243,6 +1266,13 @@ function updateTopBar() {
   const acc = proj().stats.attempts > 0 ? Math.round((proj().stats.correct / proj().stats.attempts) * 100) : 0;
   document.getElementById('accuracyVal').textContent = acc + '%';
   updateProjectSelect();
+  // Show last active time
+  const la = document.getElementById('lastActive');
+  if (la && p.lastActiveAt) {
+    la.style.display = '';
+    const d = new Date(p.lastActiveAt);
+    la.textContent = `📍 ${p.name} · 第 ${p.activeBatch || 1} 批 · 上次学习：${d.getMonth()+1}月${d.getDate()}日`;
+  }
 }
 
 // ──────────────────────────────────────
@@ -1259,6 +1289,8 @@ function renderStudy() {
 
   if (total === 0) {
     empty.style.display = ''; card.style.display = 'none'; done.style.display = 'none';
+  document.getElementById('batchSummary').style.display = 'none';
+  document.getElementById('modeTabs').style.display = '';
     return;
   }
   if (mastered >= total && total > 0) {
@@ -1313,6 +1345,7 @@ function renderStudy() {
   document.getElementById('qBadge').className = 'question-type-badge ' + badgeClass(q.type);
   if (kp.understandOnly) document.getElementById('qBadge').classList.add('qp-badge-understand');
   const qStreak = q.streak || 0; const levelQCount = (kp.questions[kp.currentLevel] || []).length; const doneCount = (kp.questions[kp.currentLevel] || []).filter(q => (q.streak || 0) >= STREAK_TO_ADVANCE).length; document.getElementById('qLevel').textContent = `本题连对 ${qStreak}/${STREAK_TO_ADVANCE} · 本题型进度 ${doneCount}/${levelQCount}`;
+  renderKPTypeProgress(kp);
   document.getElementById('qTags').innerHTML = kp.tags.map(t => `<span class="question-tag">${escapeHtml(t)}</span>`).join('');
 
   // Update button states
@@ -1344,14 +1377,26 @@ function renderStudy() {
     document.getElementById('qText').textContent = q.text;
     const optList = document.getElementById('optionsList');
     optList.style.display = '';
-    q.options.forEach((opt, idx) => {
+    // Strip letter prefixes and shuffle to avoid position-based false memory
+    const stripped = q.options.map(opt => opt.replace(/^[A-Da-d][\.\、\)]\s*/, '').trim());
+    const correctText = q.answer.trim().charAt(0).toUpperCase();
+    const correctIdx = q.options.findIndex(opt => opt.trim().charAt(0).toUpperCase() === correctText);
+    const correctContent = correctIdx >= 0 ? stripped[correctIdx] : null;
+    const indices = [0, 1, 2, 3];
+    shuffle(indices);
+    const letters = ['A', 'B', 'C', 'D'];
+    let shuffledAnswer = 'A';
+    indices.forEach((origIdx, newPos) => {
       const btn = document.createElement('button');
       btn.className = 'option-btn';
-      const letter = opt.match(/^[A-Da-d]/) ? opt.charAt(0) : String.fromCharCode(65 + idx);
-      btn.innerHTML = `<span class="opt-letter">${letter}</span><span>${escapeHtml(opt.replace(/^[A-Da-d][\.\、\)]\s*/, ''))}</span>`;
+      const letter = letters[newPos];
+      btn.innerHTML = `<span class="opt-letter">${letter}</span><span>${escapeHtml(stripped[origIdx])}</span>`;
       btn.onclick = () => submitChoice(letter, q);
       optList.appendChild(btn);
+      if (stripped[origIdx] === correctContent) shuffledAnswer = letter;
     });
+    q._shuffledAnswer = shuffledAnswer;
+    q._correctContent = correctContent;
   } else if (q.type === 'fill_blank') {
     document.getElementById('qText').textContent = q.text;
     document.getElementById('textInputWrap').style.display = '';
@@ -1369,7 +1414,7 @@ function renderStudy() {
 }
 
 function submitChoice(letter, q) {
-  const correctAnswer = q.answer.trim().charAt(0).toUpperCase();
+  const correctAnswer = (q._shuffledAnswer || q.answer.trim().charAt(0)).toUpperCase();
   const isCorrect = letter.toUpperCase() === correctAnswer;
 
   // Disable all options and highlight
@@ -1381,7 +1426,7 @@ function submitChoice(letter, q) {
     if (btnLetter === letter.toUpperCase() && !isCorrect) btn.classList.add('wrong');
   });
 
-  showFeedback(isCorrect, q.explanation, q.answer);
+  showFeedback(isCorrect, q.explanation, q._correctContent || q.answer);
   processAnswer(isCorrect);
   document.getElementById('postActions').style.display = '';
   document.getElementById('nextBtn').focus();
@@ -1578,11 +1623,21 @@ function showFeedback(isCorrect, explanation, answer) {
   if (explanation) {
     fb.innerHTML += `<div class="explanation">${escapeHtml(explanation)}</div>`;
   }
-  // "查看原知识点" + "加入错题本"
+  // "查看原知识点" + "加入错题本" + micro tip
   if (kp && kp.content) {
-    fb.innerHTML += `<div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(0,0,0,.1);display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
-      <span style="font-size:.78rem;color:var(--primary);cursor:pointer;user-select:none;" onclick="toggleOriginalKP()">📖 查看原知识点 ▾</span>
-      <span style="font-size:.78rem;cursor:pointer;user-select:none;${kp.inWrongBook ? 'color:var(--warning);' : 'color:var(--text-muted);'}" onclick="toggleWrongBookFromFeedback()">${kp.inWrongBook ? '★ 移出错题本' : '☆ 加入错题本'}</span>
+    const tips = [
+      '选对了 ≠ 真正记住了。试着闭上眼睛自己复述一遍。',
+      '你能不靠选项就把这个知识点的完整意思写出来吗？',
+      '这个知识点的关键词是哪几个？能不看原文说出来吗？',
+    ];
+    const tip = tips[Math.floor(Math.random() * tips.length)];
+    fb.innerHTML += `<div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(0,0,0,.1);">
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+        <span id="origKPToggle" style="font-size:.78rem;color:var(--primary);cursor:pointer;user-select:none;" onclick="toggleOriginalKP()">📖 查看原知识点 ▾</span>
+        <span style="font-size:.78rem;cursor:pointer;user-select:none;${kp.inWrongBook ? 'color:var(--warning);' : 'color:var(--text-muted);'}" onclick="toggleWrongBookFromFeedback()">${kp.inWrongBook ? '★ 移出错题本' : '☆ 加入错题本'}</span>
+        <span style="font-size:.78rem;cursor:pointer;user-select:none;color:var(--text-muted);" onclick="reportBadQuestion()">反馈</span>
+      </div>
+      <div style="font-size:.7rem;color:var(--text-muted);margin-top:6px;opacity:.7;">💭 ${tip}</div>
       <div id="originalKPContent" style="display:none;margin-top:6px;padding:10px;background:rgba(0,0,0,.03);border-radius:6px;font-size:.82rem;line-height:1.7;color:var(--text);font-weight:400;width:100%;">
         ${escapeHtml(kp.content)}
       </div>
@@ -1681,6 +1736,102 @@ function toggleWrongBook() {
   toast(kp.inWrongBook ? '已加入错题本' : '已移出错题本', 'info');
 }
 
+let _pendingBatchNum = 0;
+
+function buildBatchSummary(batchNum) {
+  const p = proj();
+  const batchKPs = p.kps.filter(k => (k.batch || 1) === batchNum);
+  const mastered = batchKPs.filter(k => k.currentLevel === 'mastered').length;
+  const killed = batchKPs.filter(k => k.hidden).length;
+  const inWrong = batchKPs.filter(k => k.inWrongBook).length;
+  const total = batchKPs.length;
+
+  // Weak points: top 3 active KPs by weight across all batches
+  const weakCandidates = p.kps.filter(k => !k.hidden && k.currentLevel !== 'mastered').sort((a, b) => b.weight - a.weight);
+  const weak = weakCandidates.slice(0, 3);
+
+  const totalQ = batchKPs.reduce((s, kp) => s + (kp.questions.choice?.length||0) + (kp.questions.fill_blank?.length||0) + (kp.questions.short_answer?.length||0), 0);
+
+  _pendingBatchNum = batchNum;
+
+  const card = document.getElementById('batchSummary');
+  card.style.display = '';
+  card.innerHTML = `
+    <div style="font-size:2.5rem;margin-bottom:8px;">🎉</div>
+    <h2 style="margin-bottom:4px;">第 ${batchNum} 批已掌握！</h2>
+    <p style="color:var(--text-secondary);margin-bottom:16px;">${total} 知识点 · ${mastered} 已掌握 · ${killed} 已斩杀 · ${inWrong} 在错题本</p>
+    ${weak.length > 0 ? `
+      <div style="background:var(--bg);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:16px;text-align:left;display:inline-block;min-width:300px;">
+        <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:8px;">🔍 建议重点关注的薄弱知识点</p>
+        ${weak.map(k => `
+          <div style="font-size:.85rem;color:var(--text);padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;">
+            <span>${escapeHtml((k.content || k.tags.join('·') || '(未命名)').slice(0, 40))}${(k.content||'').length > 40 ? '...' : ''}</span>
+            <span style="color:var(--text-muted);font-size:.75rem;">权重 ${k.weight}</span>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+    <div>
+      <button class="btn btn-primary btn-lg" onclick="advanceToNextBatch()">进入第 ${batchNum + 1} 批</button>
+    </div>
+  `;
+
+  // Hide question card, empty state, done state
+  document.getElementById('questionCard').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('doneState').style.display = 'none';
+  document.getElementById('modeTabs').style.display = 'none';
+  document.getElementById('postActions').style.display = 'none';
+}
+
+function advanceToNextBatch() {
+  const p = proj();
+  p.activeBatch = _pendingBatchNum + 1;
+  _pendingBatchNum = 0;
+  saveData(data);
+  document.getElementById('batchSummary').style.display = 'none';
+  document.getElementById('modeTabs').style.display = '';
+  toast(`已进入第 ${p.activeBatch} 批`, 'success');
+  renderStudy();
+}
+
+function renderKPTypeProgress(kp) {
+  const container = document.getElementById('kpTypeProgress');
+  if (!container) return;
+  const order = ['choice', 'fill_blank', 'short_answer'];
+  const labels = { choice: '选择', fill_blank: '填空', short_answer: '简答' };
+  let html = '';
+  for (let i = 0; i < order.length; i++) {
+    const lvl = order[i];
+    const qs = kp.questions[lvl] || [];
+    const hasQs = qs.length > 0;
+    const done = qs.filter(q => (q.streak || 0) >= STREAK_TO_ADVANCE).length;
+    if (!hasQs) {
+      html += `<span class="kp-type-step none">${labels[lvl]} —</span>`;
+    } else if (done >= qs.length) {
+      html += `<span class="kp-type-step done">${labels[lvl]} ✓</span>`;
+    } else if (lvl === kp.currentLevel) {
+      html += `<span class="kp-type-step current">${labels[lvl]} ${done}/${qs.length}</span>`;
+    } else {
+      html += `<span class="kp-type-step">${labels[lvl]} ${done}/${qs.length}</span>`;
+    }
+    if (i < order.length - 1) html += '<span style="color:var(--text-muted);opacity:.3;">→</span>';
+  }
+  container.innerHTML = html;
+}
+
+function refreshQuestionStats() {
+  // Immediately update the displayed streak/progress after answering
+  const kp = data.currentKP;
+  const q = data.currentQuestion;
+  if (!kp || !q) return;
+  const qStreak = q.streak || 0;
+  const levelQCount = (kp.questions[kp.currentLevel] || []).length;
+  const doneCount = (kp.questions[kp.currentLevel] || []).filter(q => (q.streak || 0) >= STREAK_TO_ADVANCE).length;
+  document.getElementById('qLevel').textContent = `本题连对 ${qStreak}/${STREAK_TO_ADVANCE} · 本题型进度 ${doneCount}/${levelQCount}`;
+  renderKPTypeProgress(kp);
+}
+
 function updateKPButtons() {
   const kp = data.currentKP;
   // Understand button
@@ -1710,6 +1861,17 @@ function updateKPButtons() {
   }
 }
 
+function reportBadQuestion() {
+  const q = data.currentQuestion;
+  if (!q) return;
+  // Mark question as done (streak=STREAK_TO_ADVANCE) so it won't appear again, no penalty
+  q.streak = STREAK_TO_ADVANCE;
+  saveData(data);
+  refreshQuestionStats();
+  toast('已记录反馈，该题不会再次出现', 'info');
+  nextQuestion();
+}
+
 function toggleWrongBookFromFeedback() {
   const kp = data.currentKP;
   if (!kp) return;
@@ -1728,8 +1890,8 @@ function toggleWrongBookFromFeedback() {
 
 function toggleOriginalKP() {
   const el = document.getElementById('originalKPContent');
-  if (el) {
-    const btn = el.previousElementSibling;
+  const btn = document.getElementById('origKPToggle');
+  if (el && btn) {
     if (el.style.display === 'none') {
       el.style.display = '';
       btn.innerHTML = '📖 查看原知识点 ▴';
@@ -2493,5 +2655,6 @@ function init() {
 
 init();
 </script>
+<div class="page-footer">⚠️ AI 生成的题目可能存在疏漏。如发现错题，可点答题后的「反馈」跳过该题，或在题库页重置该知识点重做。</div>
 </body>
 </html>
