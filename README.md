@@ -17,7 +17,7 @@
 
 ## 🚀 快速开始
 
-1. 下载 `app.html`
+1. 下载 `index.html`或者访问 https://liang2173.github.io/ctxt/
 2. 用浏览器打开（Chrome/Edge 推荐）
 3. 进入「设置」页，填入 [DeepSeek API Key](https://platform.deepseek.com/)
 4. 切换到「题库」页，上传知识点文档或粘贴文本
