@@ -321,6 +321,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
   <div class="mode-subtabs" id="wrongbookSubtabs" style="display:none;">
     <button class="mode-subtab active" data-sub="active" onclick="setWrongbookSub('active')">待攻克</button>
     <button class="mode-subtab" data-sub="mastered" onclick="setWrongbookSub('mastered')">已攻克</button>
+    <button class="mode-subtab" style="margin-left:8px;font-weight:400;opacity:.7;" onclick="printWrongbook()">🖨 打印错题本</button>
   </div>
   <!-- Understand-only list -->
   <div class="card" id="understandList" style="display:none;margin-bottom:16px;">
@@ -329,11 +330,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
   </div>
   <!-- No questions state -->
   <div class="card" id="emptyState" style="text-align:center;">
-    <div style="font-size:3rem;margin-bottom:12px;">📖</div>
-    <h2 style="margin-bottom:8px;">还没有题目</h2>
-    <p style="color:var(--text-secondary);margin-bottom:8px;">上传知识点文档或粘贴文本，让 AI 帮你生成题目</p>
-    <p style="color:var(--text-muted);font-size:.82rem;margin-bottom:20px;">💡 做题是为了记忆，不是为了做对。选对不是终点——试着在脑子里复述一遍完整的定义。</p>
-    <button class="btn btn-primary btn-lg" onclick="switchTab('bank')">去导入题目</button>
+    <div style="font-size:3rem;margin-bottom:12px;" id="emptyIcon">📖</div>
+    <h2 style="margin-bottom:8px;" id="emptyTitle">还没有题目</h2>
+    <p style="color:var(--text-secondary);margin-bottom:8px;" id="emptyDesc">上传知识点文档或粘贴文本，让 AI 帮你生成题目</p>
+    <p style="color:var(--text-muted);font-size:.82rem;margin-bottom:12px;" id="emptyTip">💡 做题是为了记忆，不是为了做对。选对不是终点——试着在脑子里复述一遍完整的定义。</p>
+    <div id="emptySetupGuide" style="display:none;text-align:left;max-width:360px;margin:0 auto 16px;background:var(--primary-light);border-radius:8px;padding:16px;font-size:.82rem;line-height:1.8;"></div>
+    <button class="btn btn-primary btn-lg" onclick="switchTab('bank')" id="emptyBtn">去导入题目</button>
   </div>
 
   <!-- Batch summary card -->
@@ -1073,6 +1075,30 @@ function badgeClass(type) {
   return m[type] || '';
 }
 
+// 熟练度标签：将内部权重转为用户可读的标签
+function weightLabel(kp) {
+  const w = kp.weight || 100;
+  if (w <= 80)  return { text: '熟练', cls: 'prof-mastered', emoji: '🟢' };
+  if (w <= 150) return { text: '正常', cls: 'prof-normal',  emoji: '⚪' };
+  if (w <= 250) return { text: '薄弱', cls: 'prof-weak',   emoji: '🟠' };
+  return                 { text: '高危', cls: 'prof-danger', emoji: '🔴' };
+}
+function weightSpan(kp, showLabel) {
+  const w = weightLabel(kp);
+  const label = showLabel ? ` 熟练度：${w.text}` : '';
+  return `<span class="${w.cls}">${w.emoji}${label}</span>`;
+}
+
+// CSS class for proficiency labels
+const PROF_CSS = `
+.prof-mastered { color: #065f46; background: #d1fae5; padding: 1px 8px; border-radius: 10px; font-size: .72rem; font-weight: 600; }
+.prof-normal  { color: #6b7280; background: #f3f4f6; padding: 1px 8px; border-radius: 10px; font-size: .72rem; font-weight: 600; }
+.prof-weak    { color: #92400e; background: #fef3c7; padding: 1px 8px; border-radius: 10px; font-size: .72rem; font-weight: 600; }
+.prof-danger  { color: #991b1b; background: #fee2e2; padding: 1px 8px; border-radius: 10px; font-size: .72rem; font-weight: 600; }
+`;
+// Inject proficiency CSS
+(function() { const s = document.createElement('style'); s.textContent = PROF_CSS; document.head.appendChild(s); })();
+
 // ──────────────────────────────────────
 // 5. AI GENERATOR (DeepSeek API)
 // ──────────────────────────────────────
@@ -1393,7 +1419,36 @@ function updateTopBar() {
 // ──────────────────────────────────────
 // 8. STUDY VIEW RENDERING
 // ──────────────────────────────────────
+
+function renderEmptyState() {
+  const hasProjects = (data.projects || []).length > 0;
+  const hasKey = !!(settings.apiKey && settings.apiKey.trim());
+  const guide = document.getElementById('emptySetupGuide');
+  const icon = document.getElementById('emptyIcon');
+  const title = document.getElementById('emptyTitle');
+  const desc = document.getElementById('emptyDesc');
+  if (!guide) return;
+
+  if (!hasKey || !hasProjects) {
+    let steps = [];
+    if (!hasKey) steps.push('<b>设置 API Key</b>：在「设置」页填入 DeepSeek API Key<br><span style="font-size:.75rem;opacity:.7;">前往 platform.deepseek.com 注册获取</span>');
+    if (!hasProjects) steps.push('<b>创建项目</b>：在「题库」页点击「新建项目」，输入名称如"高考地理"');
+    steps.push('<b>导入知识点</b>：上传文档或粘贴文本，点击「AI 生成题目」');
+    guide.innerHTML = steps.map((s, i) => '<div style="margin-bottom:6px;">' + (i + 1) + '、' + s + '</div>').join('');
+    guide.style.display = '';
+    if (icon) icon.textContent = '🚀';
+    if (title) title.textContent = '欢迎使用 AI 刷题助手';
+    if (desc) desc.textContent = '只需三步，AI 帮你生成定制化记忆题目';
+  } else {
+    guide.style.display = 'none';
+    if (icon) icon.textContent = '📖';
+    if (title) title.textContent = '还没有题目';
+    if (desc) desc.textContent = '上传知识点文档或粘贴文本，让 AI 帮你生成题目';
+  }
+}
+
 function renderStudy() {
+  renderEmptyState();
   updateTopBar();
 
   const mastered = getMasteredCount();
@@ -1786,8 +1841,8 @@ function showFeedback(isCorrect, explanation, answer) {
   const kp = data.currentKP;
   fb.className = 'feedback show ' + (isCorrect ? 'correct' : 'wrong');
   fb.innerHTML = isCorrect
-    ? `✅ 回答正确！`
-    : `❌ 回答错误，正确答案是：<strong>${escapeHtml(answer)}</strong>`;
+    ? `✅ 回答正确！ ${kp ? weightSpan(kp, true) : ''}`
+    : `❌ 回答错误，正确答案是：<strong>${escapeHtml(answer)}</strong> ${kp ? weightSpan(kp, true) : ''}`;
   if (explanation) {
     fb.innerHTML += `<div class="explanation">${escapeHtml(explanation)}</div>`;
   }
@@ -1859,7 +1914,7 @@ function renderUnderstandList() {
     <div class="kp-item">
       <div class="kp-info" style="cursor:pointer;" onclick="showKPOriginal('${kp.id}')">
         <div class="kp-content">${escapeHtml(kp.content || kp.tags.join(' · ') || '(未命名)')}</div>
-        <div class="kp-meta">${levelLabel(kp.currentLevel)} · 权重 ${kp.weight}</div>
+        <div class="kp-meta">${levelLabel(kp.currentLevel)} · <span class="${weightLabel(kp).cls}">${weightLabel(kp).emoji} ${weightLabel(kp).text}</span></div>
       </div>
       <div style="flex-shrink:0;">
         <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();restoreFromUnderstand('${kp.id}')">加入刷题</button>
@@ -1949,7 +2004,7 @@ function buildBatchSummary(batchNum) {
         <div class="batch-kp-header">
           <span class="batch-kp-idx">#${i + 1}</span>
           <span class="batch-kp-status">${statusIcon} ${statusLabel}</span>
-          <span class="batch-kp-weight">权重 ${kp.weight || 100}</span>
+          <span class="batch-kp-weight"><span class="${weightLabel(kp).cls}">${weightLabel(kp).emoji} ${weightLabel(kp).text}</span></span>
         </div>
         <div class="batch-kp-content">${escapeHtml(kp.content || kp.tags.join(' · ') || '(未命名)')}</div>
         <div class="batch-kp-meta">
@@ -2062,7 +2117,7 @@ function viewKPQuestions(kpId) {
         <h3 style="margin:0;">🔍 ${escapeHtml((kp.content||'').slice(0, 50))}${(kp.content||'').length > 50 ? '...' : ''}</h3>
         <button class="btn btn-sm" onclick="document.getElementById('qvOverlay').remove()">✕ 关闭</button>
       </div>
-      <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:12px;">${escapeHtml(kp.tags?.join(' · ') || '')} · ${levelLabel(kp.currentLevel)} · 权重 ${kp.weight || 100}</p>
+      <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:12px;">${escapeHtml(kp.tags?.join(' · ') || '')} · ${levelLabel(kp.currentLevel)} · <span class="${weightLabel(kp).cls}">${weightLabel(kp).emoji} ${weightLabel(kp).text}</span></p>
       ${questionsHtml || '<p style="color:var(--text-muted);">该知识点暂无题目</p>'}
     </div>`;
   document.body.appendChild(overlay);
@@ -2177,6 +2232,37 @@ function toggleOriginalKP() {
   }
 }
 
+
+function printWrongbook() {
+  const wrongKPs = proj().kps.filter(k => k.inWrongBook && !k.hidden);
+  if (wrongKPs.length === 0) { toast('错题本中没有可打印的内容', 'error'); return; }
+  let lines = [];
+  wrongKPs.forEach((kp, i) => {
+    lines.push('========================================');
+    lines.push('【知识点 ' + (i + 1) + '】' + (kp.content || kp.tags.join(' · ')));
+    if (kp.tags && kp.tags.length) lines.push('标签：' + kp.tags.join(', '));
+    lines.push('');
+    ['choice', 'fill_blank', 'short_answer'].forEach(lvl => {
+      const qs = kp.questions[lvl] || [];
+      if (qs.length === 0) return;
+      const lvlName = {choice: '选择题', fill_blank: '填空题', short_answer: '简答题'}[lvl];
+      qs.forEach((q, qi) => {
+        lines.push('【' + lvlName + ' ' + (qi + 1) + '】' + q.text);
+        if (lvl === 'choice' && q.options) {
+          q.options.forEach(o => lines.push('  ' + o));
+        }
+        lines.push('答案：' + (Array.isArray(q.blanks) ? q.blanks.join('、') : Array.isArray(q.answer) ? q.answer.join(', ') : q.answer));
+        lines.push('');
+      });
+    });
+  });
+  const content = lines.join('\n');
+  const w = window.open('', '_wrongbook_print');
+  w.document.write('<pre style="font-family:inherit;white-space:pre-wrap;max-width:720px;margin:0 auto;padding:20px;line-height:1.8;font-size:14px;">' + content.replace(/</g, '&lt;') + '</pre><script>window.onload=function(){window.print();}<\/script>');
+  w.document.close();
+  toast('已生成' + wrongKPs.length + '个错题知识点的打印页面，可保存为 PDF', 'success');
+}
+
 function nextQuestion() { renderStudy(); }
 
 function killCurrent() {
@@ -2231,7 +2317,7 @@ function renderKPItem(list, kp) {
       <div class="kp-content">${escapeHtml(kp.content || kp.tags.join(' · ') || '(未命名)')}</div>
       <div class="kp-meta">
         <span class="level-dot ${kp.currentLevel === 'mastered' ? 'level-mastered' : kp.currentLevel === 'short_answer' ? 'level-short' : kp.currentLevel === 'fill_blank' ? 'level-fill' : 'level-choice'}"></span>
-        ${batchLabel}${levelLabel(kp.currentLevel)} · ${totalQ} 题 · 权重 ${kp.weight}${respawnInfo}
+        ${batchLabel}${levelLabel(kp.currentLevel)} · ${totalQ} 题 · <span class="${weightLabel(kp).cls}">${weightLabel(kp).emoji} ${weightLabel(kp).text}</span>${respawnInfo}
         ${kp.hidden ? ' · 🔪 已斩杀' : ''}
       </div>
     </div>
@@ -2890,14 +2976,14 @@ function renderStats() {
   const weak = p.kps.filter(k => !k.hidden && k.currentLevel !== 'mastered').sort((a, b) => b.weight - a.weight).slice(0, 5);
   if (weak.length > 0) {
     document.getElementById('statsWeak').innerHTML = `
-      <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:8px;">🔍 当前最薄弱知识点（按权重排序）</p>
+      <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:8px;">🔍 当前最薄弱知识点（按熟练度排序）</p>
       ${weak.map((k, i) => `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:.85rem;">
           <span>${i+1}. ${escapeHtml((k.content || k.tags.join('·')).slice(0, 50))}${(k.content||'').length > 50 ? '...' : ''}</span>
           <span style="display:flex;gap:12px;color:var(--text-muted);font-size:.75rem;">
             <span>${levelLabel(k.currentLevel)}</span>
             <span>第${k.batch || 1}批</span>
-            <span style="color:var(--danger);font-weight:600;">${k.weight}</span>
+            <span class="${weightLabel(k).cls}">${weightLabel(k).emoji} ${weightLabel(k).text}</span>
           </span>
         </div>
       `).join('')}
