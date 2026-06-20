@@ -103,6 +103,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 .input-wrap input, .input-wrap textarea { width: 100%; padding: 14px 18px; border: 2px solid var(--border); border-radius: var(--radius-sm); font-size: 1rem; font-family: inherit; transition: border-color .15s; outline: none; }
 .input-wrap input:focus, .input-wrap textarea:focus { border-color: var(--primary); }
 .input-wrap textarea { min-height: 120px; resize: vertical; }
+.multi-blank-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.multi-blank-row .blank-label { font-size: .85rem; color: var(--text-secondary); white-space: nowrap; min-width: 32px; }
+.multi-blank-row input { flex: 1; padding: 10px 14px; border: 2px solid var(--border); border-radius: var(--radius-sm); font-size: .95rem; font-family: inherit; transition: border-color .15s; outline: none; }
+.multi-blank-row input:focus { border-color: var(--primary); }
 
 /* Buttons */
 .btn { padding: 10px 24px; border: none; border-radius: var(--radius-sm); font-size: .9rem; font-weight: 600; cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 6px; }
@@ -178,6 +182,34 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 .ai-summary-card-title { font-weight: 600; font-size: .9rem; margin-bottom: 6px; }
 .ai-summary-card-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
 .ai-summary-card-tags { font-size: .75rem; color: var(--text-muted); margin-top: 4px; }
+
+/* Batch summary KP cards */
+.batch-kp-list { display: flex; flex-direction: column; gap: 10px; max-height: 500px; overflow-y: auto; text-align: left; margin: 12px 0; }
+.batch-kp-card { background: var(--bg); border-radius: var(--radius-sm); padding: 14px 18px; border-left: 3px solid var(--success); transition: all .2s; }
+.batch-kp-card.batch-kp-weak { border-left-color: var(--danger); background: #fff5f5; }
+.batch-kp-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.batch-kp-idx { font-weight: 700; font-size: .8rem; color: var(--text-muted); min-width: 24px; }
+.batch-kp-status { font-size: .78rem; color: var(--text-secondary); }
+.batch-kp-weight { font-size: .75rem; color: var(--text-muted); margin-left: auto; }
+.batch-kp-content { font-size: .9rem; line-height: 1.7; color: var(--text); margin-bottom: 8px; white-space: pre-wrap; word-break: break-word; }
+.batch-kp-meta { display: flex; gap: 8px; flex-wrap: wrap; font-size: .72rem; color: var(--text-muted); margin-bottom: 10px; align-items: center; }
+.batch-kp-badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: .68rem; font-weight: 600; }
+.batch-kp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.batch-kp-actions .btn-outline { border: 1px solid var(--border); background: var(--card); color: var(--text-secondary); }
+.batch-kp-actions .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+
+/* Question viewer overlay */
+.qv-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+.qv-card { background: var(--card); border-radius: var(--radius); padding: 32px; max-width: 640px; width: 100%; max-height: 80vh; overflow-y: auto; box-shadow: var(--shadow-lg); }
+.qv-card h3 { font-size: 1.1rem; margin-bottom: 16px; }
+.qv-question { background: var(--bg); border-radius: var(--radius-sm); padding: 12px 16px; margin-bottom: 10px; }
+.qv-q-type { font-size: .7rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; margin-bottom: 6px; display: inline-block; }
+.qv-q-type.qv-choice { background: #dbeafe; color: #1e40af; }
+.qv-q-type.qv-fill { background: #fef3c7; color: #92400e; }
+.qv-q-type.qv-short { background: #d1fae5; color: #065f46; }
+.qv-q-text { font-size: .9rem; color: var(--text); margin-bottom: 6px; }
+.qv-q-answer { font-size: .82rem; color: var(--success); }
+.qv-q-answer strong { color: var(--text); }
 .ai-badge-choice { font-size: .72rem; padding: 2px 8px; border-radius: 10px; background: #dbeafe; color: #1e40af; font-weight: 500; }
 .ai-badge-fill { font-size: .72rem; padding: 2px 8px; border-radius: 10px; background: #fef3c7; color: #92400e; font-weight: 500; }
 .ai-badge-short { font-size: .72rem; padding: 2px 8px; border-radius: 10px; background: #d1fae5; color: #065f46; font-weight: 500; }
@@ -334,6 +366,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
     <div class="input-wrap" id="textInputWrap" style="display:none;">
       <input type="text" id="textInput" placeholder="输入答案..." autocomplete="off">
     </div>
+    <div class="input-wrap" id="multiBlankWrap" style="display:none;">
+      <div id="multiBlankInputs"></div>
+    </div>
     <div class="input-wrap" id="textareaInputWrap" style="display:none;">
       <textarea id="textareaInput" placeholder="请回忆并输入相关内容..."></textarea>
     </div>
@@ -451,6 +486,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 
 <!-- Settings View -->
 <div id="view-settings" class="view" style="display:none;">
+  <!-- Stats Panel -->
+  <div class="card" id="statsPanel">
+    <h3 style="margin-bottom:16px;">📊 学习统计</h3>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px;" id="statsNumbers"></div>
+    <div style="background:var(--bg);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:8px;" id="statsWeak"></div>
+  </div>
+
   <div class="card">
     <h3 style="margin-bottom:16px;">API 设置</h3>
     <div class="setting-row">
@@ -483,6 +525,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
         <input type="checkbox" id="reviewModeToggle" onchange="toggleReviewMode(this.checked)">
         <span class="toggle-slider"></span>
       </label>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">定期复习间隔（天）</div>
+        <div class="setting-desc">已掌握的知识点超过此天数后，自动回到简答题阶段。期末建议 2 天，日常可设 7 天，0 = 关闭</div>
+      </div>
+      <input type="number" id="reviewIntervalInput" value="2" min="0" max="30" style="width:70px;padding:6px 10px;border:2px solid var(--border);border-radius:var(--radius-sm);font-size:.9rem;text-align:center;outline:none;" onchange="setReviewInterval(parseInt(this.value)||0)">
     </div>
   </div>
   <div class="card">
@@ -712,7 +761,7 @@ function saveData(d) { try { localStorage.setItem(STORE_KEY, JSON.stringify(d));
 // Active project helper — always returns a valid project, creating one if needed
 function proj() {
   if (!data.projects || data.projects.length === 0) {
-    const p = { id: uid(), name: '默认项目', kps: [], stats: { today: '', count: 0, correct: 0, attempts: 0 }, coolingPool: [], lastKilled: null, _celebrated: false, activeBatch: 1, reviewMode: false };
+    const p = { id: uid(), name: '默认项目', kps: [], stats: { today: '', count: 0, correct: 0, attempts: 0 }, coolingPool: [], lastKilled: null, _celebrated: false, activeBatch: 1, reviewMode: false, reviewIntervalDays: DEFAULT_REVIEW_DAYS };
     data.projects = [p];
     data.activeProjectId = p.id;
     saveData(data);
@@ -749,7 +798,7 @@ if (data.projects) {
 }
 // Ensure at least one project exists
 if (!data.projects || data.projects.length === 0) {
-  data.projects = [{ id: uid(), name: '默认项目', kps: [], stats: { today: todayStr, count: 0, correct: 0, attempts: 0 }, coolingPool: [], lastKilled: null, _celebrated: false }];
+  data.projects = [{ id: uid(), name: '默认项目', kps: [], stats: { today: todayStr, count: 0, correct: 0, attempts: 0 }, coolingPool: [], lastKilled: null, _celebrated: false, activeBatch: 1, reviewMode: false, reviewIntervalDays: DEFAULT_REVIEW_DAYS }];
   data.activeProjectId = data.projects[0].id;
 }
 
@@ -758,9 +807,17 @@ if (!data.projects || data.projects.length === 0) {
 // ──────────────────────────────────────
 const COOLING_SIZE = 15;
 const STREAK_TO_ADVANCE = 2;
+const STREAK_RETRY = 1;  // 从简答题降级后，低级别只需答对1次
 const BATCH_SIZE = 10;  // 每批最多10个知识点
 const RESPAWN_DAYS = 2;  // 斩杀后多少天自动复活
 const FORGOT_WEIGHT = 80;  // "我忘了"的权重惩罚（vs 答错 +50）
+const DEFAULT_REVIEW_DAYS = 2;  // 默认复习间隔（天），已掌握的知识点超期后自动回到简答
+
+// 获取当前知识点的有效连对要求：如果曾到达简答但已降级，低级别只需1次
+function getReq(kp) {
+  if (kp._peakLevel === 'short_answer' && kp.currentLevel !== 'short_answer') return STREAK_RETRY;
+  return STREAK_TO_ADVANCE;
+}
 
 function getLevelOrder(kp) {
   const levels = [];
@@ -796,6 +853,25 @@ function selectNextQuestion() {
     }
   });
   if (respawned) saveData(data);
+
+  // Auto-review: demote mastered KPs past their review interval back to short_answer
+  const reviewDays = p.reviewIntervalDays !== undefined ? p.reviewIntervalDays : DEFAULT_REVIEW_DAYS;
+  if (reviewDays > 0) {
+    let reviewed = false;
+    p.kps.forEach(kp => {
+      if (kp.currentLevel === 'mastered' && kp.masteredAt && !kp.hidden
+        && (now - kp.masteredAt) > reviewDays * 86400000) {
+        // Only demote if it has short_answer questions; otherwise keep mastered
+        if (kp.questions.short_answer && kp.questions.short_answer.length > 0) {
+          kp.currentLevel = 'short_answer';
+          kp.masteredAt = null;
+          kp._reviewMode = true;  // marker for UI
+          reviewed = true;
+        }
+      }
+    });
+    if (reviewed) saveData(data);
+  }
 
   // Apply study mode filter
   let baseKPs = p.kps.filter(kp => !kp.hidden && kp.currentLevel !== 'mastered');
@@ -834,7 +910,7 @@ function selectNextQuestion() {
     const qs = kp.questions[kp.currentLevel];
     if (!qs || qs.length === 0) { candidates.push({ kp, question: null }); continue; }
     for (const q of qs) {
-      if ((q.streak || 0) >= STREAK_TO_ADVANCE) continue;
+      if ((q.streak || 0) >= getReq(kp)) continue;
       if (!proj().coolingPool.includes(q.id)) {
         candidates.push({ kp, question: q });
       }
@@ -847,7 +923,7 @@ function selectNextQuestion() {
       const qs = kp.questions[kp.currentLevel];
       if (!qs || qs.length === 0) continue;
       for (const q of qs) {
-        if ((q.streak || 0) >= STREAK_TO_ADVANCE) continue;
+        if ((q.streak || 0) >= getReq(kp)) continue;
         candidates.push({ kp, question: q });
       }
     }
@@ -859,25 +935,35 @@ function selectNextQuestion() {
   const fresh = candidates.filter(c => c.question && (c.question.streak || 0) === 0);
   const pool = fresh.length > 0 ? fresh : candidates;
 
-  // Weighted random within the chosen pool
-  const totalW = pool.reduce((s, c) => s + (c.kp.weight || 100), 0);
+  // Step 4: boost KPs with fewer completed questions at current level to prevent skipped questions
+  const poolWithBoost = pool.map(c => {
+    const levelQs = c.kp.questions[c.kp.currentLevel] || [];
+    const doneCount = levelQs.filter(q => (q.streak || 0) >= getReq(c.kp)).length;
+    const coverageRatio = levelQs.length > 0 ? doneCount / levelQs.length : 0;
+    // KPs with 0 completed questions get ~3x boost; fully done gets no boost
+    const boost = 1 + (1 - coverageRatio) * 3;
+    return { ...c, _effWeight: (c.kp.weight || 100) * boost };
+  });
+
+  // Weighted random using effective weight
+  const totalW = poolWithBoost.reduce((s, c) => s + c._effWeight, 0);
   let r = Math.random() * totalW;
-  for (const c of pool) {
-    r -= (c.kp.weight || 100);
+  for (const c of poolWithBoost) {
+    r -= c._effWeight;
     if (r <= 0) {
       if (c.question) {
         proj().coolingPool.push(c.question.id);
         while (proj().coolingPool.length > COOLING_SIZE) proj().coolingPool.shift();
       }
-      return c;
+      return { kp: c.kp, question: c.question };
     }
   }
-  const fallback = pool[pool.length - 1];
+  const fallback = poolWithBoost[poolWithBoost.length - 1];
   if (fallback.question) {
     proj().coolingPool.push(fallback.question.id);
     while (proj().coolingPool.length > COOLING_SIZE) proj().coolingPool.shift();
   }
-  return fallback;
+  return { kp: fallback.kp, question: fallback.question };
 }
 
 function processAnswer(isCorrect, isForgot) {
@@ -893,7 +979,7 @@ function processAnswer(isCorrect, isForgot) {
     q.streak = (q.streak || 0) + 1;
     kp.weight = Math.max(20, (kp.weight || 100) - 30);
     const allQs = kp.questions[kp.currentLevel] || [];
-    const allDone = allQs.length > 0 && allQs.every(q => (q.streak || 0) >= STREAK_TO_ADVANCE);
+    const allDone = allQs.length > 0 && allQs.every(q => (q.streak || 0) >= getReq(kp));
     if (allDone) {
       allQs.forEach(q => { q.streak = 0; });
       const nextLvl = getNextLevel(kp);
@@ -909,21 +995,29 @@ function processAnswer(isCorrect, isForgot) {
         toast(`知识点晋级到${levelLabel(nextLvl)}！新的考查角度即将出现`, 'success');
       } else {
         kp.currentLevel = 'mastered';
+        kp.masteredAt = Date.now();
         if (kp.inWrongBook) { kp.wrongCycles = (kp.wrongCycles || 0) + 1; kp._wrongJustMastered = true; }
         toast('🎉 知识点已掌握！', 'success');
       }
     }
   } else {
     q.streak = 0;
-    const penalty = isForgot ? FORGOT_WEIGHT : 50;
+    let penalty = isForgot ? FORGOT_WEIGHT : 50;
+    // 之前答对过又答错，说明记忆消退，额外加少量惩罚
+    if (kp._wasCorrectBefore) penalty += 20;
     kp.weight = Math.min(500, (kp.weight || 100) + penalty);
-    if (kp._wasCorrectBefore) {
-      kp.weight = Math.min(500, (kp.weight || 100) + penalty);
+    // 简答题答错：降级回选择题，之后低级别只需连对1次
+    if (kp.currentLevel === 'short_answer') {
+      kp._peakLevel = 'short_answer';
+      kp.currentLevel = 'choice';
+      // 重置所有级别的 streak
+      ['choice','fill_blank','short_answer'].forEach(lvl => {
+        (kp.questions[lvl] || []).forEach(qq => { qq.streak = 0; });
+      });
+      toast('📄 简答题答错，回到选择题重新巩固。已掌握的题目只需答对 1 次即可通过。', 'warning');
     }
   }
   kp._wasCorrectBefore = kp._wasCorrectBefore || isCorrect;
-  // Track wrongbook cycle mastery
-  if (kp.inWrongBook && !isCorrect >= false) { /* just a marker, tracking below */ }
   saveData(data);
   refreshQuestionStats();
 }
@@ -998,14 +1092,26 @@ const SYSTEM_PROMPT = `你是一个记忆辅助刷题系统的题目生成器。
 - 简答题的问法必须是"根据原文，请完整复述……"或"原文中……是如何描述的"，而非"你怎么理解……"
 - 宁可死板，不玩花样——用户输入什么，题目就考什么
 
-## 出题数量（选择题为主体，填空和简答只升级核心角度）
-按知识点文本长度决定总题量，选择题占主体地位：
-- 一句话（<40字）：    1-2道选择题；有明确术语可加1道填空题；不出简答题
-- 短段落（40-80字）：   2-3道选择题 + 1-2道填空题；核心概念可加1道简答
-- 中等段落（80-150字）：3-4道选择题 + 2-3道填空题 + 1道简答
-- 长段落（>150字）：    4-5道选择题 + 2-3道填空题 + 1-2道简答
+## 知识点顺序与结构（最高优先级）
+- 必须严格按照用户原文的段落顺序依次输出知识点，不能跳跃、不能重新排序
+- 必须尊重原文的层级结构：如果原文有章节标题（如"第一章""第二章"）和各章内的编号（如"1.""2.""3."），每个知识点必须归属于正确的章节，禁止将不同章节下的同名或同编号条目混淆
+- 相邻段落的知识点应在输出中保持相邻，系统会按输出顺序分批（每批10个知识点），相邻知识点会进入同一批
+- 如果某个章节内容很少，可以和相邻章节的知识点合并到同一批，但绝不能跨章节混淆编号
 
-重点：不是每个角度都需要升级——选择题覆盖所有角度，只有包含关键术语的角度才升级为填空题，只有知识点的核心主题才升级为简答题。
+## 出题策略（按内容类型决定，而非字数）
+根据知识点内容的「类型」决定出题量和题型，抛弃机械的字数判断：
+
+| 类型 | 识别标准 | 出题策略 |
+|------|---------|---------|
+| 🔴 核心定义/概念 | 原文给出了某术语的明确界定（如"XX是指……""XX的定义是……"） | 2-3选择 + 至少1填空 + 至少1简答（要求完整复述定义）。无论字数多短，简答不能少。 |
+| 🟡 特征/要素/分类 | 列举了事物的组成部分、特点或类别（如"XX的特点有……""包括以下几个方面……"） | 2-3选择 + 至少1填空（每个独立要素可出一题）；要素≥3个时加1道简答。 |
+| 🟢 机制/过程/步骤 | 描述因果或时序关系（如"首先……然后……""XX导致XX"） | 2-3选择 + 填空挖关键环节术语；不强制简答。 |
+| ⚪ 背景/补充/解释 | 辅助理解的案例、数据、延伸说明；不是独立的记忆单元 | 1-2选择即可，不出填空和简答。 |
+
+**判断原则**：
+- 先判断内容属于哪种类型，再决定出题策略。字数只在类型内部微调数量。
+- 一个知识点可能混合多种类型（如先下定义再列特征）→ 取最高优先级的类型（🔴>🟡>🟢>⚪）
+- tags 字段需标注类型（如"定义""特征""机制""背景"），便于程序后续分析
 
 ## 超长知识点处理（>300字）
 - 先识别知识点的核心骨架：核心概念是什么？有几层结构？
@@ -1055,8 +1161,9 @@ const SYSTEM_PROMPT = `你是一个记忆辅助刷题系统的题目生成器。
         ],
         "fill_blank": [
           {
-            "text": "包含____的填空题目，挖去的必须是原文中的关键术语",
-            "answer": "原文中的原词/原短语（多个等价表述用中文逗号分隔）",
+            "text": "包含____的填空题目。如果题目有多个空（如'____提出了____'），使用blanks字段按顺序列出每个空的答案",
+            "answer": "单空时填原文中的原词/原短语（多个等价表述用中文逗号分隔）；多空时此字段仍可填完整答案",
+            "blanks": ["空1答案", "空2答案"],
             "explanation": "帮助记忆的简短说明"
           }
         ],
@@ -1145,10 +1252,11 @@ function parseAIResult(aiResult) {
       tags: raw.tags || [],
       questions: {
         choice: (raw.questions?.choice || []).map(q => ({ id: uid(), type: 'choice', text: q.text, options: q.options, answer: q.answer, explanation: q.explanation || '', streak: 0 })),
-        fill_blank: (raw.questions?.fill_blank || []).map(q => ({ id: uid(), type: 'fill_blank', text: q.text, answer: q.answer, explanation: q.explanation || '', streak: 0 })),
+        fill_blank: (raw.questions?.fill_blank || []).map(q => ({ id: uid(), type: 'fill_blank', text: q.text, answer: q.answer, explanation: q.explanation || '', blanks: q.blanks || null, streak: 0 })),
         short_answer: (raw.questions?.short_answer || []).map(q => ({ id: uid(), type: 'short_answer', text: q.text, answer: q.answer, keywords: q.keywords || [], streak: 0 }))
       },
       currentLevel: 'choice',
+      _peakLevel: null,
       streak: 0,
       weight: 100,
       hidden: false,
@@ -1156,7 +1264,8 @@ function parseAIResult(aiResult) {
       _wasCorrectBefore: false,
       understandOnly: false,
       inWrongBook: false,
-      wrongCycles: 0
+      wrongCycles: 0,
+      masteredAt: null
     };
     // Set initial level to first available
     const order = getLevelOrder(kp);
@@ -1231,11 +1340,17 @@ function parseManualText(text) {
     tags: ['手动导入'],
     questions: questions,
     currentLevel: 'choice',
+    _peakLevel: null,
     streak: 0,
     weight: 100,
-    killed: false,
+    hidden: false,
     killedAt: null,
-    _wasCorrectBefore: false
+    respawnDays: RESPAWN_DAYS,
+    _wasCorrectBefore: false,
+    understandOnly: false,
+    inWrongBook: false,
+    wrongCycles: 0,
+    masteredAt: null
   }];
 }
 
@@ -1319,6 +1434,7 @@ function renderStudy() {
   document.getElementById('optionsList').innerHTML = '';
   document.getElementById('optionsList').style.display = 'none';
   document.getElementById('textInputWrap').style.display = 'none';
+  document.getElementById('multiBlankWrap').style.display = 'none';
   document.getElementById('textareaInputWrap').style.display = 'none';
   document.getElementById('submitBtn').style.display = 'none';
   document.getElementById('forgotBtn').style.display = 'none';
@@ -1344,7 +1460,7 @@ function renderStudy() {
   document.getElementById('qBadge').textContent = typeLabel;
   document.getElementById('qBadge').className = 'question-type-badge ' + badgeClass(q.type);
   if (kp.understandOnly) document.getElementById('qBadge').classList.add('qp-badge-understand');
-  const qStreak = q.streak || 0; const levelQCount = (kp.questions[kp.currentLevel] || []).length; const doneCount = (kp.questions[kp.currentLevel] || []).filter(q => (q.streak || 0) >= STREAK_TO_ADVANCE).length; document.getElementById('qLevel').textContent = `本题连对 ${qStreak}/${STREAK_TO_ADVANCE} · 本题型进度 ${doneCount}/${levelQCount}`;
+  const req = getReq(kp); const qStreak = q.streak || 0; const levelQCount = (kp.questions[kp.currentLevel] || []).length; const doneCount = (kp.questions[kp.currentLevel] || []).filter(q => (q.streak || 0) >= req).length; document.getElementById('qLevel').textContent = `本题连对 ${qStreak}/${req} · 本题型进度 ${doneCount}/${levelQCount}`;
   renderKPTypeProgress(kp);
   document.getElementById('qTags').innerHTML = kp.tags.map(t => `<span class="question-tag">${escapeHtml(t)}</span>`).join('');
 
@@ -1370,7 +1486,17 @@ function renderStudy() {
     const fb = document.getElementById('feedback');
     fb.className = 'feedback show';
     fb.style.background = '#fef3c7'; fb.style.color = '#92400e'; fb.style.border = '1px solid #fcd34d';
-    fb.innerHTML = `🔄 你曾在 <strong>${days}</strong> 天前掌握过这个知识点，再来巩固一次`;
+    fb.innerHTML = `🔄 你曾在 <strong>${days}</strong> 天前斩杀过这个知识点，再来巩固一次`;
+  }
+
+  // 如果知识点是定期复习回来的
+  if (kp._reviewMode) {
+    kp._reviewMode = false;
+    saveData(data);
+    const fb = document.getElementById('feedback');
+    fb.className = 'feedback show';
+    fb.style.background = '#e0f2fe'; fb.style.color = '#0369a1'; fb.style.border = '1px solid #bae6fd';
+    fb.innerHTML = `🔄 定期复习提醒：该知识点已超过复习间隔，来做一道简答题巩固吧`;
   }
 
   if (q.type === 'choice') {
@@ -1398,12 +1524,38 @@ function renderStudy() {
     q._shuffledAnswer = shuffledAnswer;
     q._correctContent = correctContent;
   } else if (q.type === 'fill_blank') {
-    document.getElementById('qText').textContent = q.text;
-    document.getElementById('textInputWrap').style.display = '';
-    document.getElementById('textInput').value = '';
-    document.getElementById('submitBtn').style.display = '';
-    document.getElementById('forgotBtn').style.display = '';
-    document.getElementById('textInput').focus();
+    const blanks = q.blanks || [];
+    if (blanks.length > 1) {
+      // Multi-blank: render separate input for each blank
+      document.getElementById('qText').textContent = q.text;
+      const container = document.getElementById('multiBlankInputs');
+      container.innerHTML = blanks.map((b, i) => `
+        <div class="multi-blank-row">
+          <span class="blank-label">空${i + 1}</span>
+          <input type="text" class="multi-blank-input" data-index="${i}" placeholder="输入第${i + 1}个空的答案..." autocomplete="off">
+        </div>
+      `).join('');
+      document.getElementById('multiBlankWrap').style.display = '';
+      document.getElementById('submitBtn').style.display = '';
+      document.getElementById('forgotBtn').style.display = '';
+      // Focus first input
+      const firstInput = container.querySelector('input');
+      if (firstInput) firstInput.focus();
+      // Enter submits
+      container.querySelectorAll('input').forEach(inp => {
+        inp.addEventListener('keydown', e => {
+          if (e.key === 'Enter') { e.preventDefault(); submitAnswer(); }
+        });
+      });
+    } else {
+      // Single blank: existing behavior
+      document.getElementById('qText').textContent = q.text;
+      document.getElementById('textInputWrap').style.display = '';
+      document.getElementById('textInput').value = '';
+      document.getElementById('submitBtn').style.display = '';
+      document.getElementById('forgotBtn').style.display = '';
+      document.getElementById('textInput').focus();
+    }
   } else if (q.type === 'short_answer') {
     document.getElementById('qText').textContent = q.text;
     document.getElementById('textareaInputWrap').style.display = '';
@@ -1440,9 +1592,25 @@ function submitAnswer(isForgot) {
   document.getElementById('forgotBtn').style.display = 'none';
 
   if (q.type === 'fill_blank') {
+    const blanks = q.blanks || [];
     if (isForgot) {
-      showFeedback(false, q.explanation, q.answer);
+      const answerText = blanks.length > 1 ? blanks.join('、') : q.answer;
+      showFeedback(false, q.explanation, answerText);
       processAnswer(false, true);
+    } else if (blanks.length > 1) {
+      // Multi-blank: check each answer against corresponding blank
+      const inputs = document.querySelectorAll('.multi-blank-input');
+      const userAnswers = Array.from(inputs).map(inp => inp.value.trim());
+      const results = blanks.map((correct, i) => checkFillAnswer(userAnswers[i] || '', correct));
+      const allCorrect = results.every(r => r);
+      const answerText = blanks.map((b, i) => `空${i+1}: ${b} ${results[i] ? '✅' : `❌(你的答案: ${userAnswers[i] || '未作答'})`}`).join('；');
+      showFeedback(allCorrect, q.explanation, answerText);
+      processAnswer(allCorrect);
+      if (!allCorrect) {
+        const fb = document.getElementById('feedback');
+        fb.innerHTML += `<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(0,0,0,.08);font-size:.78rem;color:var(--text-muted);">认为机器判错了？<span style="color:var(--primary);cursor:pointer;" onclick="appealFillBlank()">我认为答对了</span></div>`;
+      }
+      document.getElementById('multiBlankWrap').style.display = 'none';
     } else {
       const userAns = document.getElementById('textInput').value.trim();
       const isCorrect = checkFillAnswer(userAns, q.answer);
@@ -1497,7 +1665,7 @@ function createProject(name) {
   const p = {
     id: uid(), name: name,
     kps: [], stats: { today: todayStr, count: 0, correct: 0, attempts: 0 },
-    coolingPool: [], lastKilled: null, _celebrated: false, activeBatch: 1, reviewMode: false
+    coolingPool: [], lastKilled: null, _celebrated: false, activeBatch: 1, reviewMode: false, reviewIntervalDays: DEFAULT_REVIEW_DAYS
   };
   data.projects.push(p);
   data.activeProjectId = p.id;
@@ -1703,7 +1871,19 @@ function renderUnderstandList() {
 function showKPOriginal(kpId) {
   const kp = proj().kps.find(k => k.id === kpId);
   if (!kp) return;
-  alert(kp.content || '(无原文)');
+  const overlay = document.createElement('div');
+  overlay.className = 'qv-overlay';
+  overlay.id = 'kpOriginalOverlay';
+  overlay.innerHTML = `
+    <div class="qv-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 style="margin:0;">📖 知识点原文</h3>
+        <button class="btn btn-sm" onclick="document.getElementById('kpOriginalOverlay').remove()">✕ 关闭</button>
+      </div>
+      <div style="white-space:pre-wrap;line-height:1.8;font-size:.9rem;">${escapeHtml(kp.content || '(无原文)')}</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
 }
 
 function restoreFromUnderstand(kpId) {
@@ -1746,32 +1926,55 @@ function buildBatchSummary(batchNum) {
   const inWrong = batchKPs.filter(k => k.inWrongBook).length;
   const total = batchKPs.length;
 
-  // Weak points: top 3 active KPs by weight across all batches
-  const weakCandidates = p.kps.filter(k => !k.hidden && k.currentLevel !== 'mastered').sort((a, b) => b.weight - a.weight);
-  const weak = weakCandidates.slice(0, 3);
+  // Weak points: top 3 active KPs by weight within this batch only
+  const weakCandidates = batchKPs.filter(k => !k.hidden && k.currentLevel !== 'mastered').sort((a, b) => b.weight - a.weight);
+  const weakIds = new Set(weakCandidates.slice(0, 3).map(k => k.id));
 
   const totalQ = batchKPs.reduce((s, kp) => s + (kp.questions.choice?.length||0) + (kp.questions.fill_blank?.length||0) + (kp.questions.short_answer?.length||0), 0);
 
   _pendingBatchNum = batchNum;
+
+  // Build KP cards sorted by original order (preserve document sequence)
+  const kpCards = batchKPs.map((kp, i) => {
+    const cQ = kp.questions.choice?.length || 0;
+    const fQ = kp.questions.fill_blank?.length || 0;
+    const sQ = kp.questions.short_answer?.length || 0;
+    const totalKpQ = cQ + fQ + sQ;
+    const isWeak = weakIds.has(kp.id);
+    const isMastered = kp.currentLevel === 'mastered';
+    const statusIcon = kp.hidden ? '💀' : isMastered ? '✅' : kp.currentLevel === 'short_answer' ? '📄' : kp.currentLevel === 'fill_blank' ? '✏️' : '📝';
+    const statusLabel = kp.hidden ? '已斩杀' : isMastered ? '已掌握' : `停留在「${levelLabel(kp.currentLevel)}」`;
+    return `
+      <div class="batch-kp-card${isWeak ? ' batch-kp-weak' : ''}" id="batchKp-${kp.id}">
+        <div class="batch-kp-header">
+          <span class="batch-kp-idx">#${i + 1}</span>
+          <span class="batch-kp-status">${statusIcon} ${statusLabel}</span>
+          <span class="batch-kp-weight">权重 ${kp.weight || 100}</span>
+        </div>
+        <div class="batch-kp-content">${escapeHtml(kp.content || kp.tags.join(' · ') || '(未命名)')}</div>
+        <div class="batch-kp-meta">
+          <span>标签：${escapeHtml((kp.tags || []).join(' · ') || '无')}</span>
+          <span>题目：选择${cQ} 填空${fQ} 简答${sQ}（共${totalKpQ}题）</span>
+          ${kp.understandOnly ? '<span class="batch-kp-badge">仅了解</span>' : ''}
+          ${kp.inWrongBook ? '<span class="batch-kp-badge" style="background:#fef3c7;color:#92400e;">★ 错题本</span>' : ''}
+          ${isWeak ? '<span class="batch-kp-badge" style="background:#fee2e2;color:#991b1b;">⚠ 薄弱</span>' : ''}
+        </div>
+        <div class="batch-kp-actions">
+          <button class="btn btn-sm add-next-batch-btn" onclick="addToNextBatch('${kp.id}')"${kp.hidden ? ' disabled' : ''}>📥 加入下一批继续刷</button>
+          <button class="btn btn-sm btn-outline" onclick="viewKPQuestions('${kp.id}')">🔍 查看本题</button>
+        </div>
+      </div>`;
+  }).join('');
 
   const card = document.getElementById('batchSummary');
   card.style.display = '';
   card.innerHTML = `
     <div style="font-size:2.5rem;margin-bottom:8px;">🎉</div>
     <h2 style="margin-bottom:4px;">第 ${batchNum} 批已掌握！</h2>
-    <p style="color:var(--text-secondary);margin-bottom:16px;">${total} 知识点 · ${mastered} 已掌握 · ${killed} 已斩杀 · ${inWrong} 在错题本</p>
-    ${weak.length > 0 ? `
-      <div style="background:var(--bg);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:16px;text-align:left;display:inline-block;min-width:300px;">
-        <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:8px;">🔍 建议重点关注的薄弱知识点</p>
-        ${weak.map(k => `
-          <div style="font-size:.85rem;color:var(--text);padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;">
-            <span>${escapeHtml((k.content || k.tags.join('·') || '(未命名)').slice(0, 40))}${(k.content||'').length > 40 ? '...' : ''}</span>
-            <span style="color:var(--text-muted);font-size:.75rem;">权重 ${k.weight}</span>
-          </div>
-        `).join('')}
-      </div>
-    ` : ''}
-    <div>
+    <p style="color:var(--text-secondary);margin-bottom:4px;">${total} 知识点 · ${mastered} 已掌握 · ${killed} 已斩杀 · ${inWrong} 在错题本 · 共 ${totalQ} 题</p>
+    <p style="font-size:.75rem;color:var(--text-muted);margin-bottom:16px;">📋 以下是本批次全部知识点原文，请逐条复检确认掌握情况。标记 ⚠薄弱 的为建议重点回顾。</p>
+    <div class="batch-kp-list">${kpCards}</div>
+    <div style="margin-top:20px;">
       <button class="btn btn-primary btn-lg" onclick="advanceToNextBatch()">进入第 ${batchNum + 1} 批</button>
     </div>
   `;
@@ -1795,6 +1998,77 @@ function advanceToNextBatch() {
   renderStudy();
 }
 
+function addToNextBatch(kpId) {
+  const p = proj();
+  const kp = p.kps.find(k => k.id === kpId);
+  if (!kp) return;
+  const nextBatch = (p.activeBatch || 1) + 1;
+  kp.batch = nextBatch;
+  // Reset to choice level so it can be practiced again
+  const order = getLevelOrder(kp);
+  kp.currentLevel = order.length > 0 ? order[0] : 'choice';
+  // Reset all question streaks
+  ['choice','fill_blank','short_answer'].forEach(lvl => {
+    (kp.questions[lvl] || []).forEach(qq => { qq.streak = 0; });
+  });
+  kp.weight = Math.min(500, (kp.weight || 100) + 20); // slight weight bump
+  kp.hidden = false; // unhide if killed
+  saveData(data);
+  // Update the card's button state
+  const btn = document.querySelector(`#batchKp-${kpId} .add-next-batch-btn`);
+  if (btn) { btn.disabled = true; btn.textContent = '✓ 已加入下一批'; }
+  toast(`已加入第 ${nextBatch} 批，进度已重置`, 'info');
+}
+
+function viewKPQuestions(kpId) {
+  const p = proj();
+  const kp = p.kps.find(k => k.id === kpId);
+  if (!kp) return;
+  const types = [
+    { key: 'choice', label: '选择题', cls: 'qv-choice' },
+    { key: 'fill_blank', label: '填空题', cls: 'qv-fill' },
+    { key: 'short_answer', label: '简答题', cls: 'qv-short' }
+  ];
+  let questionsHtml = '';
+  let qCount = 0;
+  for (const t of types) {
+    const qs = kp.questions[t.key] || [];
+    if (qs.length === 0) continue;
+    qCount += qs.length;
+    questionsHtml += `<div style="font-weight:600;font-size:.85rem;margin:12px 0 6px;color:var(--text-secondary);">${t.label}（${qs.length} 题）</div>`;
+    for (const q of qs) {
+      let answerHtml = '';
+      if (t.key === 'choice') {
+        const correctLetter = (q.answer || '').trim().charAt(0).toUpperCase();
+        answerHtml = `<span style="color:var(--success);">✓ ${correctLetter}. ${escapeHtml(q.options?.find(opt => opt.trim().charAt(0).toUpperCase() === correctLetter) || q.answer)}</span>`;
+      } else {
+        answerHtml = `<span style="color:var(--success);">✓ ${escapeHtml(q.answer || '')}</span>`;
+      }
+      questionsHtml += `
+        <div class="qv-question">
+          <span class="qv-q-type ${t.cls}">${t.label}</span>
+          <div class="qv-q-text">${escapeHtml(q.text)}</div>
+          <div class="qv-q-answer">${answerHtml}</div>
+          ${q.explanation ? `<div style="font-size:.78rem;color:var(--text-muted);margin-top:4px;">💡 ${escapeHtml(q.explanation)}</div>` : ''}
+        </div>`;
+    }
+  }
+  const overlay = document.createElement('div');
+  overlay.className = 'qv-overlay';
+  overlay.id = 'qvOverlay';
+  overlay.innerHTML = `
+    <div class="qv-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <h3 style="margin:0;">🔍 ${escapeHtml((kp.content||'').slice(0, 50))}${(kp.content||'').length > 50 ? '...' : ''}</h3>
+        <button class="btn btn-sm" onclick="document.getElementById('qvOverlay').remove()">✕ 关闭</button>
+      </div>
+      <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:12px;">${escapeHtml(kp.tags?.join(' · ') || '')} · ${levelLabel(kp.currentLevel)} · 权重 ${kp.weight || 100}</p>
+      ${questionsHtml || '<p style="color:var(--text-muted);">该知识点暂无题目</p>'}
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+}
+
 function renderKPTypeProgress(kp) {
   const container = document.getElementById('kpTypeProgress');
   if (!container) return;
@@ -1805,7 +2079,7 @@ function renderKPTypeProgress(kp) {
     const lvl = order[i];
     const qs = kp.questions[lvl] || [];
     const hasQs = qs.length > 0;
-    const done = qs.filter(q => (q.streak || 0) >= STREAK_TO_ADVANCE).length;
+    const done = qs.filter(q => (q.streak || 0) >= getReq(kp)).length;
     if (!hasQs) {
       html += `<span class="kp-type-step none">${labels[lvl]} —</span>`;
     } else if (done >= qs.length) {
@@ -1825,10 +2099,10 @@ function refreshQuestionStats() {
   const kp = data.currentKP;
   const q = data.currentQuestion;
   if (!kp || !q) return;
-  const qStreak = q.streak || 0;
+  const req = getReq(kp); const qStreak = q.streak || 0;
   const levelQCount = (kp.questions[kp.currentLevel] || []).length;
-  const doneCount = (kp.questions[kp.currentLevel] || []).filter(q => (q.streak || 0) >= STREAK_TO_ADVANCE).length;
-  document.getElementById('qLevel').textContent = `本题连对 ${qStreak}/${STREAK_TO_ADVANCE} · 本题型进度 ${doneCount}/${levelQCount}`;
+  const doneCount = (kp.questions[kp.currentLevel] || []).filter(q => (q.streak || 0) >= req).length;
+  document.getElementById('qLevel').textContent = `本题连对 ${qStreak}/${req} · 本题型进度 ${doneCount}/${levelQCount}`;
   renderKPTypeProgress(kp);
 }
 
@@ -1862,10 +2136,11 @@ function updateKPButtons() {
 }
 
 function reportBadQuestion() {
+  const kp = data.currentKP;
   const q = data.currentQuestion;
-  if (!q) return;
-  // Mark question as done (streak=STREAK_TO_ADVANCE) so it won't appear again, no penalty
-  q.streak = STREAK_TO_ADVANCE;
+  if (!kp || !q) return;
+  // Mark question as done (streak meets effective requirement) so it won't appear again, no penalty
+  q.streak = getReq(kp);
   saveData(data);
   refreshQuestionStats();
   toast('已记录反馈，该题不会再次出现', 'info');
@@ -1976,6 +2251,7 @@ function resetKP(kpId) {
   kp.hidden = false;
   kp.killedAt = null;
   kp._wasCorrectBefore = false;
+  kp._peakLevel = null;
   kp.understandOnly = false;
   kp.inWrongBook = false;
   kp.wrongCycles = 0;
@@ -1993,7 +2269,10 @@ function resetKP(kpId) {
 // 10. IMPORT / EXPORT
 // ──────────────────────────────────────
 
-// Smart splitting: detect numbered items, handling Arabic/Chinese numerals and sub-items
+// Smart splitting: detect numbered items, handling Arabic/Chinese numerals and sub-items.
+// Key design: （数字）patterns (like （1）（2）) are treated as MAIN item boundaries,
+// so each sub-point becomes its own chunk. A summary chunk covering just the headings
+// is also generated so the user can learn the overall framework first.
 function splitIntoChunks(text) {
   const lines = text.split('\n');
   const items = [];
@@ -2002,33 +2281,64 @@ function splitIntoChunks(text) {
   // Patterns for different numbering styles
   const MAIN_ITEM_RE = /^(\d{1,3})[、.）\)]\s*/;      // 1、 2. 3） 4)（空格可选）
   const CN_NUM_RE = /^[一二三四五六七八九十]+[、.]\s*/;  // 一、 二、 三、
+  const PAREN_NUM_RE = /^[（(]\d{1,2}[）)]\s*/;        // （1） (2) — 提升为主项
   const SUB_ITEM_RE = /^[a-zＡ-Ｚ][.、]\s/i;           // a. b. (lower/upper letters)
-  const SUB_PAREN_RE = /^[（(]\d{1,2}[）)]\s*/;       // (1) （2）
   const SUB_CIRCLE_RE = /^[①②③④⑤⑥⑦⑧⑨⑩]/;          // ① ② ③
 
   function isMainItem(line) {
-    return MAIN_ITEM_RE.test(line) || CN_NUM_RE.test(line);
+    return MAIN_ITEM_RE.test(line) || CN_NUM_RE.test(line) || PAREN_NUM_RE.test(line);
   }
   function isSubItem(line) {
-    return SUB_ITEM_RE.test(line) || SUB_PAREN_RE.test(line) || SUB_CIRCLE_RE.test(line);
+    return SUB_ITEM_RE.test(line) || SUB_CIRCLE_RE.test(line);
   }
+  // Extract the heading part (first line) from an item
+  function firstLine(item) { return item.split('\n')[0].trim(); }
 
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) {
       currentItem += '\n' + line;
     } else if (isMainItem(trimmed) && !isSubItem(trimmed)) {
-      // Main item boundary: save previous, start new
       if (currentItem.trim()) items.push(currentItem.trim());
       currentItem = line;
     } else if (isSubItem(trimmed) && currentItem.trim()) {
-      // Sub-item: belongs to current parent, don't split
       currentItem += '\n' + line;
     } else {
       currentItem += '\n' + line;
     }
   }
   if (currentItem.trim()) items.push(currentItem.trim());
+
+  // Post-process: detect parent-heading + consecutive paren-numbered sub-items pattern.
+  // e.g. "影响地图概括的因素：" followed by （1）...（2）...（3）...
+  // Produces: 1 summary chunk (parent + sub-headings only) + 1 chunk per sub-item.
+  if (items.length >= 2) {
+    const parent = items[0];
+    const parentIsHeading = !isMainItem(firstLine(parent)) && parent.split('\n').length <= 2;
+    // Count consecutive paren-numbered items immediately after parent
+    let parenCount = 0;
+    for (let i = 1; i < items.length; i++) {
+      if (PAREN_NUM_RE.test(firstLine(items[i]))) { parenCount++; }
+      else { break; }
+    }
+    if (parenCount >= 2 && parentIsHeading) {
+      const parentTitle = firstLine(parent);
+      const children = items.slice(1, 1 + parenCount);
+      const rest = items.slice(1 + parenCount);
+      // Summary chunk: parent + just the sub-headings (titles only, no explanations)
+      const summaryItem = parentTitle + '\n' + children.map(item => firstLine(item)).join('\n');
+      // Individual chunks: parent + each sub-item (with full explanation)
+      const subChunks = children.map(item => parentTitle + '\n' + item);
+      // Replace items: summary + expanded sub-items + any remaining items
+      const expanded = [summaryItem, ...subChunks, ...rest];
+      const CHUNK_SIZE = 12;
+      const chunks = [];
+      for (let i = 0; i < expanded.length; i += CHUNK_SIZE) {
+        chunks.push(expanded.slice(i, i + CHUNK_SIZE).join('\n\n'));
+      }
+      return chunks;
+    }
+  }
 
   // If fewer than 2 items detected but text is long, force-split by blank lines
   if (items.length <= 1) {
@@ -2052,7 +2362,7 @@ function splitIntoChunks(text) {
     return [text];
   }
 
-  // Group into chunks of ~12 items to stay under token limit
+  // Default: group into chunks of ~12 items
   const CHUNK_SIZE = 12;
   const chunks = [];
   for (let i = 0; i < items.length; i += CHUNK_SIZE) {
@@ -2530,6 +2840,16 @@ function toggleReviewMode(on) {
   renderStudy();
 }
 
+function setReviewInterval(days) {
+  proj().reviewIntervalDays = days;
+  saveData(data);
+  if (days === 0) {
+    toast('定期复习已关闭', 'info');
+  } else {
+    toast(`复习间隔已设为 ${days} 天`, 'info');
+  }
+}
+
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelector(`[data-tab="${name}"]`).classList.add('active');
@@ -2541,6 +2861,51 @@ function switchTab(name) {
     document.getElementById('apiKeyInput').value = settings.apiKey || '';
     document.getElementById('modelSelect').value = settings.model || 'deepseek-chat';
     document.getElementById('reviewModeToggle').checked = proj().reviewMode || false;
+    document.getElementById('reviewIntervalInput').value = proj().reviewIntervalDays !== undefined ? proj().reviewIntervalDays : DEFAULT_REVIEW_DAYS;
+    renderStats();
+  }
+}
+
+function renderStats() {
+  const p = proj();
+  if (!p) return;
+  const today = p.stats.today === todayStr ? p.stats.count : 0;
+  const total = p.stats.count || 0;
+  const correct = p.stats.correct || 0;
+  const attempts = p.stats.attempts || 0;
+  const acc = attempts > 0 ? Math.round((correct / attempts) * 100) : 0;
+  const mastered = p.kps.filter(k => !k.hidden && k.currentLevel === 'mastered').length;
+  const totalActive = p.kps.filter(k => !k.hidden).length;
+  const active = p.kps.filter(k => !k.hidden && k.currentLevel !== 'mastered').length;
+
+  document.getElementById('statsNumbers').innerHTML = `
+    <div class="topbar-stat"><div class="num" style="font-size:1.4rem;">${today}</div><div class="lbl">今日答题</div></div>
+    <div class="topbar-stat"><div class="num" style="font-size:1.4rem;">${total}</div><div class="lbl">总计答题</div></div>
+    <div class="topbar-stat"><div class="num" style="font-size:1.4rem;">${acc}%</div><div class="lbl">总正确率</div></div>
+    <div class="topbar-stat"><div class="num" style="font-size:1.4rem;">${mastered}/${totalActive}</div><div class="lbl">已掌握/总知识点</div></div>
+    <div class="topbar-stat"><div class="num" style="font-size:1.4rem;">${active}</div><div class="lbl">待学习</div></div>
+  `;
+
+  // Top 5 weak KPs
+  const weak = p.kps.filter(k => !k.hidden && k.currentLevel !== 'mastered').sort((a, b) => b.weight - a.weight).slice(0, 5);
+  if (weak.length > 0) {
+    document.getElementById('statsWeak').innerHTML = `
+      <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:8px;">🔍 当前最薄弱知识点（按权重排序）</p>
+      ${weak.map((k, i) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:.85rem;">
+          <span>${i+1}. ${escapeHtml((k.content || k.tags.join('·')).slice(0, 50))}${(k.content||'').length > 50 ? '...' : ''}</span>
+          <span style="display:flex;gap:12px;color:var(--text-muted);font-size:.75rem;">
+            <span>${levelLabel(k.currentLevel)}</span>
+            <span>第${k.batch || 1}批</span>
+            <span style="color:var(--danger);font-weight:600;">${k.weight}</span>
+          </span>
+        </div>
+      `).join('')}
+    `;
+  } else if (totalActive > 0) {
+    document.getElementById('statsWeak').innerHTML = '<p style="color:var(--success);text-align:center;padding:8px;">🎉 全部知识点已掌握！</p>';
+  } else {
+    document.getElementById('statsWeak').innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:8px;">暂无数据，开始导入知识点吧</p>';
   }
 }
 
@@ -2613,6 +2978,8 @@ function init() {
       if (!kp.questions) kp.questions = { choice: [], fill_blank: [], short_answer: [] };
       if (!kp.weight) kp.weight = 100;
       if (kp._wasCorrectBefore === undefined) kp._wasCorrectBefore = false;
+      if (kp._peakLevel === undefined) kp._peakLevel = null;
+      if (kp.masteredAt === undefined) kp.masteredAt = (kp.currentLevel === 'mastered' ? Date.now() : null);
       if (kp.understandOnly === undefined) kp.understandOnly = false;
       if (kp.inWrongBook === undefined) kp.inWrongBook = false;
       if (kp.wrongCycles === undefined) kp.wrongCycles = 0;
@@ -2627,6 +2994,7 @@ function init() {
     if (project._celebrated === undefined) project._celebrated = false;
     if (!project.activeBatch) project.activeBatch = 1;
     if (project.reviewMode === undefined) project.reviewMode = false;
+    if (project.reviewIntervalDays === undefined) project.reviewIntervalDays = DEFAULT_REVIEW_DAYS;
     // Ensure all KPs have batch/respawn fields, migrate old killed->hidden
     (project.kps || []).forEach((kp, i) => {
       if (!kp.batch) kp.batch = Math.floor(i / BATCH_SIZE) + 1;

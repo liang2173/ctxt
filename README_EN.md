@@ -4,15 +4,16 @@ An AI-powered memory reinforcement tool built on cognitive science. Upload your 
 
 ## ✨ Features
 
-- **🤖 AI Question Generation** — Upload `.docx` / `.txt` / text paste; DeepSeek automatically extracts knowledge points and generates multiple-choice, fill-in-the-blank, and short-answer questions
-- **🧠 Spaced Repetition** — Improved SM-2 scheduling engine pushes reviews right at the forgetting threshold
-- **📈 Multi-Level Progression** — Choice → Fill-in-blank → Short-answer → Mastered, four-tier advancement
+- **🤖 AI Question Generation** — Upload `.docx` / `.txt` / text paste; DeepSeek automatically extracts knowledge points and intelligently assigns question types (choice/fill/short-answer) based on content type (definition/feature/process/background)
+- **📈 Multi-Level Progression** — Choice → Fill-in-blank → Short-answer → Mastered; wrong short-answers auto-demote to choice level; mastered items auto-review after configurable interval
 - **🔪 Kill & Respawn** — "Kill" mastered items to hide them; auto-respawn after 48 hours for reinforcement
 - **📁 Multi-Project Support** — Independent question banks per subject, no cross-contamination
-- **🧩 Batched Practice** — 10 knowledge points per batch, unlock progressively to avoid fatigue
+- **🧩 Batched Practice** — 10 knowledge points per batch, unlock progressively; batch summary shows full content of all KPs, supports re-adding to next batch and viewing all questions
 - **⭐ Understand-Only & Wrong Book** — Mark low-priority items for quick review; collect mistakes in a dedicated mode for focused practice
 - **📡 Live AI Progress** — Streaming output, progress bar, stage indicators, and card-based result preview
 - **🔍 Pre-Check Panel** — Free local preview: item count, chunk plan, token estimate, image detection — confirm before spending API credits
+- **✏️ Multi-Blank Fill** — Multiple blanks in one question, each with its own input field and independent grading
+- **📊 Learning Stats** — Dashboard showing daily/total answers, accuracy, mastery progress, and weakest knowledge points
 - **📥 Auto-Backup** — Automatic `.json` backup download on every import; never lose data to a browser cache clear
 
 ## 🚀 Quick Start
@@ -45,10 +46,10 @@ Three methods:
 
 ### Study Flow
 
-1. **Choice** — Build basic recognition; advance after 2 consecutive correct answers
-2. **Fill-in-blank** — Reinforce key terminology recall
-3. **Short-answer** — Train full content reproduction (self-assess with optional appeal)
-4. **Kill** — Remove mastered items; auto-respawn after 48 hours
+1. **Choice** — Build basic recognition; advance after 2 consecutive correct answers (reduced to 1 when retrying after short-answer demotion)
+2. **Fill-in-blank** — Reinforce key terminology recall; supports multi-blank questions with independent input fields
+3. **Short-answer** — Train full content reproduction (self-assess with optional appeal); wrong answers return you to choice level with relaxed requirements
+4. **Mastered** — Marked complete; auto-reviews after configurable interval (default 2 days for exam mode)
 
 ### Data Safety
 
