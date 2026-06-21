@@ -389,7 +389,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
       <p style="margin-bottom:6px;font-size:.82rem;color:var(--text-muted);">对比后，如认为自己的表述与原文意思一致，可点下方按钮标记为答对</p>
       <div class="btn-row">
         <button class="btn btn-sm btn-success" onclick="selfAssessClaim()">我认为答对了 ✓</button>
-        <span style="font-size:.78rem;color:var(--text-muted);margin-left:12px;">否则直接点下一题即可（默认按未答对处理）</span>
+        <button class="btn btn-sm btn-ghost" onclick="nextQuestion()" style="margin-left:12px;">下一题 →（默认按答错）</button>
       </div>
     </div>
 
@@ -824,11 +824,10 @@ function getReq(kp) {
 function getLevelOrder(kp) {
   const levels = [];
   if (kp.questions.choice && kp.questions.choice.length > 0) levels.push('choice');
-  // 了解型知识点：做完选择题直接掌握，跳过填空和简答
-  if (!kp.understandOnly) {
-    if (kp.questions.fill_blank && kp.questions.fill_blank.length > 0) levels.push('fill_blank');
-    if (kp.questions.short_answer && kp.questions.short_answer.length > 0) levels.push('short_answer');
-  }
+  if (kp.questions.fill_blank && kp.questions.fill_blank.length > 0) levels.push('fill_blank');
+  // 简答题阶段：只有存在非「仅了解」的简答题时才需要
+  const saQuestions = kp.questions.short_answer || [];
+  if (saQuestions.some(q => !q.understandOnly)) levels.push('short_answer');
   return levels;
 }
 
@@ -909,8 +908,13 @@ function selectNextQuestion() {
   // Step 1: collect all unanswered candidates (prefer not in cooling pool)
   let candidates = [];
   for (const kp of available) {
-    const qs = kp.questions[kp.currentLevel];
+    let qs = kp.questions[kp.currentLevel];
     if (!qs || qs.length === 0) { candidates.push({ kp, question: null }); continue; }
+    // 简答阶段跳过仅了解的题目
+    if (kp.currentLevel === 'short_answer') {
+      qs = qs.filter(q => !q.understandOnly);
+      if (qs.length === 0) { candidates.push({ kp, question: null }); continue; }
+    }
     for (const q of qs) {
       if ((q.streak || 0) >= getReq(kp)) continue;
       if (!proj().coolingPool.includes(q.id)) {
@@ -922,8 +926,12 @@ function selectNextQuestion() {
   // Step 2: relax cooling pool if all candidates were hidden
   if (candidates.length === 0) {
     for (const kp of available) {
-      const qs = kp.questions[kp.currentLevel];
+      let qs = kp.questions[kp.currentLevel];
       if (!qs || qs.length === 0) continue;
+      if (kp.currentLevel === 'short_answer') {
+        qs = qs.filter(q => !q.understandOnly);
+        if (qs.length === 0) continue;
+      }
       for (const q of qs) {
         if ((q.streak || 0) >= getReq(kp)) continue;
         candidates.push({ kp, question: q });
@@ -981,7 +989,9 @@ function processAnswer(isCorrect, isForgot) {
     q.streak = (q.streak || 0) + 1;
     kp.weight = Math.max(20, (kp.weight || 100) - 30);
     const allQs = kp.questions[kp.currentLevel] || [];
-    const allDone = allQs.length > 0 && allQs.every(q => (q.streak || 0) >= getReq(kp));
+    // 简答阶段排除仅了解题目（它们不需要答对即可通过）
+    const eligibleQs = kp.currentLevel === 'short_answer' ? allQs.filter(q => !q.understandOnly) : allQs;
+    const allDone = eligibleQs.length > 0 && eligibleQs.every(q => (q.streak || 0) >= getReq(kp));
     if (allDone) {
       allQs.forEach(q => { q.streak = 0; });
       const nextLvl = getNextLevel(kp);
@@ -1182,7 +1192,7 @@ const SYSTEM_PROMPT = `你是一个记忆辅助刷题系统的题目生成器。
             "text": "选择题题目",
             "options": ["A. 选项A", "B. 选项B", "C. 选项C", "D. 选项D"],
             "answer": "A",
-            "explanation": "（正确答案）……（引用原文依据）；其他选项：XX是……领域的真实概念；YY是……（每个干扰项都要有知识拓展价值，不依赖字母标识）"
+            "explanation": "（正确答案）……（引用原文依据）；其他选项：……领域的真实概念；……（每个干扰项都要有知识拓展价值。禁止使用ABCD字母指代选项——选项会被随机排序，字母会错位。必须用选项内容本身来指代，如'赫特纳提出的区域地理学派……'而非'选项B……'）"
           }
         ],
         "fill_blank": [
@@ -1277,9 +1287,9 @@ function parseAIResult(aiResult) {
       content: raw.content || '',
       tags: raw.tags || [],
       questions: {
-        choice: (raw.questions?.choice || []).map(q => ({ id: uid(), type: 'choice', text: q.text, options: q.options, answer: q.answer, explanation: q.explanation || '', streak: 0 })),
-        fill_blank: (raw.questions?.fill_blank || []).map(q => ({ id: uid(), type: 'fill_blank', text: q.text, answer: q.answer, explanation: q.explanation || '', blanks: q.blanks || null, streak: 0 })),
-        short_answer: (raw.questions?.short_answer || []).map(q => ({ id: uid(), type: 'short_answer', text: q.text, answer: q.answer, keywords: q.keywords || [], streak: 0 }))
+        choice: (raw.questions?.choice || []).map(q => ({ id: uid(), type: 'choice', text: q.text, options: q.options, answer: q.answer, explanation: q.explanation || '', streak: 0, understandOnly: false })),
+        fill_blank: (raw.questions?.fill_blank || []).map(q => ({ id: uid(), type: 'fill_blank', text: q.text, answer: q.answer, explanation: q.explanation || '', blanks: q.blanks || null, streak: 0, understandOnly: false })),
+        short_answer: (raw.questions?.short_answer || []).map(q => ({ id: uid(), type: 'short_answer', text: q.text, answer: q.answer, keywords: q.keywords || [], streak: 0, understandOnly: false }))
       },
       currentLevel: 'choice',
       _peakLevel: null,
@@ -1288,7 +1298,6 @@ function parseAIResult(aiResult) {
       hidden: false,
       killedAt: null,
       _wasCorrectBefore: false,
-      understandOnly: false,
       inWrongBook: false,
       wrongCycles: 0,
       masteredAt: null
@@ -1357,7 +1366,7 @@ function parseManualText(text) {
   if (items.length === 0) return [];
   const questions = { choice: [], fill_blank: [], short_answer: [] };
   for (const item of items) {
-    const q = { id: uid(), type: item.type, text: item.text, options: item.options, answer: item.answer, explanation: item.explanation, keywords: [], streak: 0 };
+    const q = { id: uid(), type: item.type, text: item.text, options: item.options, answer: item.answer, explanation: item.explanation, keywords: [], streak: 0, understandOnly: false };
     questions[item.type].push(q);
   }
   return [{
@@ -1373,7 +1382,6 @@ function parseManualText(text) {
     killedAt: null,
     respawnDays: RESPAWN_DAYS,
     _wasCorrectBefore: false,
-    understandOnly: false,
     inWrongBook: false,
     wrongCycles: 0,
     masteredAt: null
@@ -1396,24 +1404,28 @@ function getTotalActive() {
 }
 
 function updateTopBar() {
-  const mastered = getMasteredCount();
-  const total = getTotalActive();
   const p = proj();
+  const activeBatch = p.activeBatch || 1;
+  // Current batch progress (primary bar)
+  const batchKPs = p.kps.filter(k => !k.hidden && (k.batch || 1) === activeBatch);
+  const batchMastered = batchKPs.filter(k => k.currentLevel === 'mastered').length;
+  const batchTotal = batchKPs.length;
   const maxBatch = Math.max(...p.kps.map(k => k.batch || 1), 1);
-  const batchInfo = maxBatch > 1 ? ` 第${p.activeBatch || 1}/${maxBatch}批` : '';
-  document.getElementById('progressText').textContent = `${mastered}/${total}${batchInfo}`;
-  document.getElementById('progressFill').style.width = total > 0 ? `${(mastered / total) * 100}%` : '0%';
+  const batchLabel = maxBatch > 1 ? `第${activeBatch}/${maxBatch}批` : '';
+  document.getElementById('progressText').textContent = batchTotal > 0 ? `${batchLabel} ${batchMastered}/${batchTotal}` : '0/0';
+  document.getElementById('progressFill').style.width = batchTotal > 0 ? `${(batchMastered / batchTotal) * 100}%` : '0%';
+  // Overall progress as secondary text
+  const totalMastered = getMasteredCount();
+  const totalActive = getTotalActive();
+  const la = document.getElementById('lastActive');
+  if (la) {
+    la.style.display = '';
+    la.textContent = `总进度 ${totalMastered}/${totalActive}${p.lastActiveAt ? ' · 上次 ' + (new Date(p.lastActiveAt).getMonth()+1) + '月' + new Date(p.lastActiveAt).getDate() + '日' : ''}`;
+  }
   document.getElementById('todayCount').textContent = proj().stats.count;
   const acc = proj().stats.attempts > 0 ? Math.round((proj().stats.correct / proj().stats.attempts) * 100) : 0;
   document.getElementById('accuracyVal').textContent = acc + '%';
   updateProjectSelect();
-  // Show last active time
-  const la = document.getElementById('lastActive');
-  if (la && p.lastActiveAt) {
-    la.style.display = '';
-    const d = new Date(p.lastActiveAt);
-    la.textContent = `📍 ${p.name} · 第 ${p.activeBatch || 1} 批 · 上次学习：${d.getMonth()+1}月${d.getDate()}日`;
-  }
 }
 
 // ──────────────────────────────────────
@@ -1511,11 +1523,11 @@ function renderStudy() {
   }
 
   // Render question
-  const typeLabel = questionTypeLabel(q.type) + (kp.understandOnly ? ' (了解)' : '');
+  const typeLabel = questionTypeLabel(q.type) + (q.understandOnly ? ' (了解)' : '');
   document.getElementById('qBadge').textContent = typeLabel;
   document.getElementById('qBadge').className = 'question-type-badge ' + badgeClass(q.type);
-  if (kp.understandOnly) document.getElementById('qBadge').classList.add('qp-badge-understand');
-  const req = getReq(kp); const qStreak = q.streak || 0; const levelQCount = (kp.questions[kp.currentLevel] || []).length; const doneCount = (kp.questions[kp.currentLevel] || []).filter(q => (q.streak || 0) >= req).length; document.getElementById('qLevel').textContent = `本题连对 ${qStreak}/${req} · 本题型进度 ${doneCount}/${levelQCount}`;
+  if (q.understandOnly) document.getElementById('qBadge').classList.add('qp-badge-understand');
+  const req = getReq(kp); const qStreak = q.streak || 0; const levelQs = kp.questions[kp.currentLevel] || []; const eligibleLvlQs = kp.currentLevel === 'short_answer' ? levelQs.filter(q => !q.understandOnly) : levelQs; const levelQCount = eligibleLvlQs.length; const doneCount = eligibleLvlQs.filter(q => (q.streak || 0) >= req).length; document.getElementById('qLevel').textContent = `本题连对 ${qStreak}/${req} · 本题型进度 ${doneCount}/${levelQCount}`;
   renderKPTypeProgress(kp);
   document.getElementById('qTags').innerHTML = kp.tags.map(t => `<span class="question-tag">${escapeHtml(t)}</span>`).join('');
 
@@ -1566,8 +1578,11 @@ function renderStudy() {
     const indices = [0, 1, 2, 3];
     shuffle(indices);
     const letters = ['A', 'B', 'C', 'D'];
+    const origLetters = ['A', 'B', 'C', 'D'];
+    const letterMap = {}; // 原始字母 → 混排后字母，用于解析中的字母引用转换
     let shuffledAnswer = 'A';
     indices.forEach((origIdx, newPos) => {
+      letterMap[origLetters[origIdx]] = letters[newPos];
       const btn = document.createElement('button');
       btn.className = 'option-btn';
       const letter = letters[newPos];
@@ -1578,6 +1593,7 @@ function renderStudy() {
     });
     q._shuffledAnswer = shuffledAnswer;
     q._correctContent = correctContent;
+    q._letterMap = letterMap;
   } else if (q.type === 'fill_blank') {
     const blanks = q.blanks || [];
     if (blanks.length > 1) {
@@ -1633,7 +1649,7 @@ function submitChoice(letter, q) {
     if (btnLetter === letter.toUpperCase() && !isCorrect) btn.classList.add('wrong');
   });
 
-  showFeedback(isCorrect, q.explanation, q._correctContent || q.answer);
+  showFeedback(isCorrect, translateChoiceExplanation(q.explanation, q._letterMap), q._correctContent || q.answer);
   processAnswer(isCorrect);
   document.getElementById('postActions').style.display = '';
   document.getElementById('nextBtn').focus();
@@ -1658,6 +1674,7 @@ function submitAnswer(isForgot) {
       const userAnswers = Array.from(inputs).map(inp => inp.value.trim());
       const results = blanks.map((correct, i) => checkFillAnswer(userAnswers[i] || '', correct));
       const allCorrect = results.every(r => r);
+      if (!allCorrect) { q._preWrongWeight = (data.currentKP || {}).weight; }
       const answerText = blanks.map((b, i) => `空${i+1}: ${b} ${results[i] ? '✅' : `❌(你的答案: ${userAnswers[i] || '未作答'})`}`).join('；');
       showFeedback(allCorrect, q.explanation, answerText);
       processAnswer(allCorrect);
@@ -1669,6 +1686,7 @@ function submitAnswer(isForgot) {
     } else {
       const userAns = document.getElementById('textInput').value.trim();
       const isCorrect = checkFillAnswer(userAns, q.answer);
+      if (!isCorrect) { q._preWrongWeight = (data.currentKP || {}).weight; }
       showFeedback(isCorrect, q.explanation, q.answer);
       processAnswer(isCorrect);
       // Add self-assess appeal for wrong fill_blank answers
@@ -1685,21 +1703,36 @@ function submitAnswer(isForgot) {
     document.getElementById('userAnswerDisplay').textContent = userAns || '(未作答)';
     document.getElementById('modelAnswerDisplay').textContent = q.answer;
     document.getElementById('selfAssess').className = 'self-assess show';
-    if (isForgot) selfAssess(false, true);
+    if (isForgot) { selfAssess(false, true); }
+    else { q._pendingSelfAssess = true; } // 标记：离开时若未自评则默认按答错处理
   }
   updateTopBar();
 }
 
 function appealFillBlank() {
-  // User claims fill-in-the-blank answer was correct despite machine mismatch
+  // User claims fill-in-the-blank answer was correct despite machine mismatch.
+  // Undo the double-count from processAnswer(false) that was already called, then
+  // apply correct-answer effects so weight and streak behave correctly.
   const q = data.currentQuestion;
-  if (!q) return;
-  showFeedback(true, q.explanation, q.answer);
+  const kp = data.currentKP;
+  if (!q || !kp) return;
+  // Undo stats double-count from processAnswer(false)
+  proj().stats.count--;
+  proj().stats.attempts--;
+  // Restore weight to before the wrong-answer penalty
+  if (q._preWrongWeight !== undefined) {
+    kp.weight = q._preWrongWeight;
+    delete q._preWrongWeight;
+  }
+  // Pre-set streak so processAnswer(true) brings it to exactly the requirement
+  q.streak = getReq(kp) - 1;
   processAnswer(true);
+  showFeedback(true, q.explanation, q.answer);
   toast('已记为答对', 'info');
 }
 
 function selfAssessClaim() {
+  if (data.currentQuestion) data.currentQuestion._pendingSelfAssess = false;
   selfAssess(true, false);
 }
 
@@ -1836,6 +1869,24 @@ function checkFillAnswer(userAns, correctAns) {
   return false;
 }
 
+// 将选择题解析中的原始字母引用替换为混排后的字母
+// 只替换中文语境下的明确模式（选项A / A选项），避免误伤"维生素A"等
+function translateChoiceExplanation(explanation, letterMap) {
+  if (!explanation || !letterMap) return explanation;
+  let result = explanation;
+  // 选项A / 选项B / 选项C / 选项D
+  result = result.replace(/选项([A-Da-d])/g, (_, letter) => {
+    const upper = letter.toUpperCase();
+    return '选项' + (letterMap[upper] || upper);
+  });
+  // A选项 / B选项 / C选项 / D选项
+  result = result.replace(/([A-Da-d])选项/g, (_, letter) => {
+    const upper = letter.toUpperCase();
+    return (letterMap[upper] || upper) + '选项';
+  });
+  return result;
+}
+
 function showFeedback(isCorrect, explanation, answer) {
   const fb = document.getElementById('feedback');
   const kp = data.currentKP;
@@ -1907,20 +1958,26 @@ function setWrongbookSub(sub) {
 
 function renderUnderstandList() {
   const p = proj();
-  const items = p.kps.filter(k => k.understandOnly && !k.hidden);
+  const items = p.kps.filter(k => {
+    if (k.hidden) return false;
+    return ['choice','fill_blank','short_answer'].some(t => (k.questions[t] || []).some(q => q.understandOnly));
+  });
   document.getElementById('understandListMsg').style.display = items.length === 0 ? '' : 'none';
   const container = document.getElementById('understandListItems');
-  container.innerHTML = items.map(kp => `
+  container.innerHTML = items.map(kp => {
+    const uoCount = ['choice','fill_blank','short_answer'].reduce((s, t) => s + (kp.questions[t] || []).filter(q => q.understandOnly).length, 0);
+    const totalQ = ['choice','fill_blank','short_answer'].reduce((s, t) => s + (kp.questions[t] || []).length, 0);
+    return `
     <div class="kp-item">
       <div class="kp-info" style="cursor:pointer;" onclick="showKPOriginal('${kp.id}')">
         <div class="kp-content">${escapeHtml(kp.content || kp.tags.join(' · ') || '(未命名)')}</div>
-        <div class="kp-meta">${levelLabel(kp.currentLevel)} · <span class="${weightLabel(kp).cls}">${weightLabel(kp).emoji} ${weightLabel(kp).text}</span></div>
+        <div class="kp-meta">${levelLabel(kp.currentLevel)} · <span class="${weightLabel(kp).cls}">${weightLabel(kp).emoji} ${weightLabel(kp).text}</span> · 仅了解 ${uoCount}/${totalQ} 题</div>
       </div>
       <div style="flex-shrink:0;">
-        <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();restoreFromUnderstand('${kp.id}')">加入刷题</button>
+        <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();restoreFromUnderstand('${kp.id}')">全部恢复</button>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 function showKPOriginal(kpId) {
@@ -1944,20 +2001,45 @@ function showKPOriginal(kpId) {
 function restoreFromUnderstand(kpId) {
   const kp = proj().kps.find(k => k.id === kpId);
   if (!kp) return;
-  kp.understandOnly = false;
+  ['choice', 'fill_blank', 'short_answer'].forEach(t => {
+    (kp.questions[t] || []).forEach(q => { q.understandOnly = false; });
+  });
   saveData(data);
   renderUnderstandList();
-  toast('已加入正常刷题队列', 'info');
+  toast('已恢复全部题目为正常刷题模式', 'info');
 }
 
-// ── Understand-only toggle ──
+// ── Understand-only toggle (per-question) ──
 function toggleUnderstandOnly() {
-  const kp = data.currentKP;
-  if (!kp) return;
-  kp.understandOnly = !kp.understandOnly;
+  const q = data.currentQuestion;
+  if (!q) return;
+  q.understandOnly = !q.understandOnly;
   saveData(data);
   updateKPButtons();
-  toast(kp.understandOnly ? '已标记为了解型，选择题完成后直接掌握' : '已取消了解型标记，恢复三级递进', 'info');
+  // Refresh badge
+  const badge = document.getElementById('qBadge');
+  if (badge) {
+    if (q.understandOnly) badge.classList.add('qp-badge-understand');
+    else badge.classList.remove('qp-badge-understand');
+    const typeLabel = questionTypeLabel(q.type) + (q.understandOnly ? ' (了解)' : '');
+    badge.textContent = typeLabel;
+  }
+  // If toggled on a short_answer question and all SA questions are now understandOnly, auto-promote
+  if (q.understandOnly && data.currentKP && data.currentKP.currentLevel === 'short_answer') {
+    const saqs = data.currentKP.questions.short_answer || [];
+    if (saqs.length > 0 && saqs.every(sq => sq.understandOnly)) {
+      // All short_answer questions are understandOnly — advance KP
+      const kp = data.currentKP;
+      kp.currentLevel = 'mastered';
+      kp.masteredAt = Date.now();
+      if (kp.inWrongBook) { kp.wrongCycles = (kp.wrongCycles || 0) + 1; kp._wrongJustMastered = true; }
+      saveData(data);
+      toast('所有简答题均已标为仅了解，知识点直接掌握', 'success');
+      setTimeout(() => renderStudy(), 500);
+      return;
+    }
+  }
+  toast(q.understandOnly ? '本题已标为仅了解（选择+填空后跳过简答）' : '已取消仅了解标记，恢复完整三级递进', 'info');
 }
 
 // ── Wrong book toggle ──
@@ -1995,6 +2077,9 @@ function buildBatchSummary(batchNum) {
     const fQ = kp.questions.fill_blank?.length || 0;
     const sQ = kp.questions.short_answer?.length || 0;
     const totalKpQ = cQ + fQ + sQ;
+    const uoCount = (kp.questions.choice || []).filter(q => q.understandOnly).length
+                  + (kp.questions.fill_blank || []).filter(q => q.understandOnly).length
+                  + (kp.questions.short_answer || []).filter(q => q.understandOnly).length;
     const isWeak = weakIds.has(kp.id);
     const isMastered = kp.currentLevel === 'mastered';
     const statusIcon = kp.hidden ? '💀' : isMastered ? '✅' : kp.currentLevel === 'short_answer' ? '📄' : kp.currentLevel === 'fill_blank' ? '✏️' : '📝';
@@ -2010,7 +2095,7 @@ function buildBatchSummary(batchNum) {
         <div class="batch-kp-meta">
           <span>标签：${escapeHtml((kp.tags || []).join(' · ') || '无')}</span>
           <span>题目：选择${cQ} 填空${fQ} 简答${sQ}（共${totalKpQ}题）</span>
-          ${kp.understandOnly ? '<span class="batch-kp-badge">仅了解</span>' : ''}
+          ${uoCount > 0 ? `<span class="batch-kp-badge">仅了解 ${uoCount} 题</span>` : ''}
           ${kp.inWrongBook ? '<span class="batch-kp-badge" style="background:#fef3c7;color:#92400e;">★ 错题本</span>' : ''}
           ${isWeak ? '<span class="batch-kp-badge" style="background:#fee2e2;color:#991b1b;">⚠ 薄弱</span>' : ''}
         </div>
@@ -2101,7 +2186,7 @@ function viewKPQuestions(kpId) {
       }
       questionsHtml += `
         <div class="qv-question">
-          <span class="qv-q-type ${t.cls}">${t.label}</span>
+          <span class="qv-q-type ${t.cls}">${t.label}${q.understandOnly ? ' (了解)' : ''}</span>
           <div class="qv-q-text">${escapeHtml(q.text)}</div>
           <div class="qv-q-answer">${answerHtml}</div>
           ${q.explanation ? `<div style="font-size:.78rem;color:var(--text-muted);margin-top:4px;">💡 ${escapeHtml(q.explanation)}</div>` : ''}
@@ -2129,20 +2214,26 @@ function renderKPTypeProgress(kp) {
   if (!container) return;
   const order = ['choice', 'fill_blank', 'short_answer'];
   const labels = { choice: '选择', fill_blank: '填空', short_answer: '简答' };
+  const currentIdx = order.indexOf(kp.currentLevel);
   let html = '';
   for (let i = 0; i < order.length; i++) {
     const lvl = order[i];
     const qs = kp.questions[lvl] || [];
-    const hasQs = qs.length > 0;
-    const done = qs.filter(q => (q.streak || 0) >= getReq(kp)).length;
+    // 简答阶段排除仅了解题目
+    const eligible = lvl === 'short_answer' ? qs.filter(q => !q.understandOnly) : qs;
+    const hasQs = eligible.length > 0;
     if (!hasQs) {
       html += `<span class="kp-type-step none">${labels[lvl]} —</span>`;
-    } else if (done >= qs.length) {
+    } else if (i < currentIdx) {
+      // 已过去的阶段 — 始终显示完成
       html += `<span class="kp-type-step done">${labels[lvl]} ✓</span>`;
-    } else if (lvl === kp.currentLevel) {
-      html += `<span class="kp-type-step current">${labels[lvl]} ${done}/${qs.length}</span>`;
+    } else if (i === currentIdx) {
+      // 当前阶段 — 显示实时进度
+      const done = eligible.filter(q => (q.streak || 0) >= getReq(kp)).length;
+      html += `<span class="kp-type-step current">${labels[lvl]} ${done}/${eligible.length}</span>`;
     } else {
-      html += `<span class="kp-type-step">${labels[lvl]} ${done}/${qs.length}</span>`;
+      // 未来阶段
+      html += `<span class="kp-type-step">${labels[lvl]}</span>`;
     }
     if (i < order.length - 1) html += '<span style="color:var(--text-muted);opacity:.3;">→</span>';
   }
@@ -2155,26 +2246,29 @@ function refreshQuestionStats() {
   const q = data.currentQuestion;
   if (!kp || !q) return;
   const req = getReq(kp); const qStreak = q.streak || 0;
-  const levelQCount = (kp.questions[kp.currentLevel] || []).length;
-  const doneCount = (kp.questions[kp.currentLevel] || []).filter(q => (q.streak || 0) >= req).length;
+  const levelQs = kp.questions[kp.currentLevel] || [];
+  const eligibleLvlQs = kp.currentLevel === 'short_answer' ? levelQs.filter(q => !q.understandOnly) : levelQs;
+  const levelQCount = eligibleLvlQs.length;
+  const doneCount = eligibleLvlQs.filter(q => (q.streak || 0) >= req).length;
   document.getElementById('qLevel').textContent = `本题连对 ${qStreak}/${req} · 本题型进度 ${doneCount}/${levelQCount}`;
   renderKPTypeProgress(kp);
 }
 
 function updateKPButtons() {
   const kp = data.currentKP;
-  // Understand button
+  const q = data.currentQuestion;
+  // Understand button — per-question state
   const uBtn = document.getElementById('qpUnderstandBtn');
   const uTip = document.getElementById('qpUnderstandTip');
   const wrap = document.getElementById('qpUnderstandWrap');
   if (!kp || !uBtn) return;
   wrap.style.display = '';
-  if (kp.understandOnly) {
+  if (q && q.understandOnly) {
     uBtn.classList.add('flagged');
-    uTip.textContent = '已标记为仅了解，点击取消';
+    uTip.textContent = '本题已标为仅了解，点击取消';
   } else {
     uBtn.classList.remove('flagged');
-    uTip.textContent = '标记为了解型';
+    uTip.textContent = '标本题为了解型（跳过简答）';
   }
   // Star button
   const sBtn = document.getElementById('qpStarBtn');
@@ -2263,7 +2357,15 @@ function printWrongbook() {
   toast('已生成' + wrongKPs.length + '个错题知识点的打印页面，可保存为 PDF', 'success');
 }
 
-function nextQuestion() { renderStudy(); }
+function nextQuestion() {
+  // 简答题自评面板未操作时，默认按答错记录
+  const q = data.currentQuestion;
+  if (q && q._pendingSelfAssess) {
+    q._pendingSelfAssess = false;
+    processAnswer(false, false);
+  }
+  renderStudy();
+}
 
 function killCurrent() {
   if (!data.currentKP) return;
@@ -2338,12 +2440,11 @@ function resetKP(kpId) {
   kp.killedAt = null;
   kp._wasCorrectBefore = false;
   kp._peakLevel = null;
-  kp.understandOnly = false;
   kp.inWrongBook = false;
   kp.wrongCycles = 0;
-  // Reset all question streaks
+  // Reset all question streaks and understandOnly flags
   ['choice', 'fill_blank', 'short_answer'].forEach(t => {
-    (kp.questions[t] || []).forEach(q => { q.streak = 0; });
+    (kp.questions[t] || []).forEach(q => { q.streak = 0; q.understandOnly = false; });
   });
   saveData(data);
   renderBank();
@@ -3066,11 +3167,18 @@ function init() {
       if (kp._wasCorrectBefore === undefined) kp._wasCorrectBefore = false;
       if (kp._peakLevel === undefined) kp._peakLevel = null;
       if (kp.masteredAt === undefined) kp.masteredAt = (kp.currentLevel === 'mastered' ? Date.now() : null);
-      if (kp.understandOnly === undefined) kp.understandOnly = false;
+      // Migrate old KP-level understandOnly → question-level
+      const _wasUnderstandOnly = kp.understandOnly === true;
+      if (kp.understandOnly !== undefined) delete kp.understandOnly;
       if (kp.inWrongBook === undefined) kp.inWrongBook = false;
       if (kp.wrongCycles === undefined) kp.wrongCycles = 0;
       ['choice', 'fill_blank', 'short_answer'].forEach(t => {
-        (kp.questions[t] || []).forEach(q => { if (!q.id) q.id = uid(); if (q.streak === undefined) q.streak = 0; });
+        (kp.questions[t] || []).forEach(q => {
+          if (!q.id) q.id = uid();
+          if (q.streak === undefined) q.streak = 0;
+          if (_wasUnderstandOnly) q.understandOnly = true;
+          if (q.understandOnly === undefined) q.understandOnly = false;
+        });
       });
     });
     // Ensure project has all required fields
