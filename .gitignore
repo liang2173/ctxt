@@ -1,2 +1,15 @@
 .claude/
 .claude
+
+# 旧版代码
+index-V1.html
+
+# 测试/调试文件
+labels_check.txt
+报错.png
+题目1.png
+
+# 学习资料 & 项目文档
+*.docx
+*.pptx
+*.png
