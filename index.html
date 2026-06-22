@@ -2615,107 +2615,40 @@ function resetKP(kpId) {
 // Key design: （数字）patterns (like （1）（2）) are treated as MAIN item boundaries,
 // so each sub-point becomes its own chunk. A summary chunk covering just the headings
 // is also generated so the user can learn the overall framework first.
+// Split text into API-sized chunks at paragraph boundaries.
+// No regex guesswork — just paragraph capacity. The AI's prompt already handles
+// structural understanding; our only job is to not overflow its output tokens.
 function splitIntoChunks(text) {
-  const lines = text.split('\n');
-  const items = [];
-  let currentItem = '';
+  // Split into paragraphs: DOCX uses \n\n, pasted text uses \n
+  const rawParas = text.split(/\n\n|\n/).map(p => p.trim()).filter(p => p.length > 0);
+  if (rawParas.length === 0) return [text];
 
-  // Patterns for different numbering styles
-  const MAIN_ITEM_RE = /^(\d{1,3})[、.）\)]\s*/;      // 1、 2. 3） 4)
-  const CN_NUM_RE = /^[一二三四五六七八九十]+[、.]\s*/;  // 一、 二、 三、
-  const PAREN_NUM_RE = /^[（(]\d{1,2}[）)]\s*/;        // （1） (2)
-  const SUB_ITEM_RE = /^[a-zＡ-Ｚ][.、]\s/i;           // a. b.
-  const SUB_CIRCLE_RE = /^[①②③④⑤⑥⑦⑧⑨⑩]/;
-  // Chinese document structures: 考点1 / 第1章 / 第一章
-  const EXAM_POINT_RE = /^考点\s*\d{1,2}\s*[：:]/;     // 考点1： 考点2：
-  const CHAPTER_RE = /^第[一二三四五六七八九十\d]{1,3}章/;  // 第一章 第2章
-  const SECTION_RE = /^第[一二三四五六七八九十\d]{1,3}[节部分]/; // 第一节 第2部分
-
-  function isMainItem(line) {
-    return MAIN_ITEM_RE.test(line) || CN_NUM_RE.test(line) || PAREN_NUM_RE.test(line)
-      || EXAM_POINT_RE.test(line) || CHAPTER_RE.test(line) || SECTION_RE.test(line);
-  }
-  function isSubItem(line) {
-    return SUB_ITEM_RE.test(line) || SUB_CIRCLE_RE.test(line);
-  }
-  // Extract the heading part (first line) from an item
-  function firstLine(item) { return item.split('\n')[0].trim(); }
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      currentItem += '\n' + line;
-    } else if (isMainItem(trimmed) && !isSubItem(trimmed)) {
-      if (currentItem.trim()) items.push(currentItem.trim());
-      currentItem = line;
-    } else if (isSubItem(trimmed) && currentItem.trim()) {
-      currentItem += '\n' + line;
-    } else {
-      currentItem += '\n' + line;
+  // Merge very short adjacent paragraphs (bare titles like "第一章" that sit alone)
+  const paras = [];
+  for (let i = 0; i < rawParas.length; ) {
+    let merged = rawParas[i];
+    i++;
+    while (i < rawParas.length && merged.length < 60) {
+      merged += '\n' + rawParas[i];
+      i++;
     }
-  }
-  if (currentItem.trim()) items.push(currentItem.trim());
-
-  // Post-process: detect parent-heading + consecutive paren-numbered sub-items pattern.
-  // e.g. "影响地图概括的因素：" followed by （1）...（2）...（3）...
-  // Produces: 1 summary chunk (parent + sub-headings only) + 1 chunk per sub-item.
-  if (items.length >= 2) {
-    const parent = items[0];
-    const parentIsHeading = !isMainItem(firstLine(parent)) && parent.split('\n').length <= 2;
-    // Count consecutive paren-numbered items immediately after parent
-    let parenCount = 0;
-    for (let i = 1; i < items.length; i++) {
-      if (PAREN_NUM_RE.test(firstLine(items[i]))) { parenCount++; }
-      else { break; }
-    }
-    if (parenCount >= 2 && parentIsHeading) {
-      const parentTitle = firstLine(parent);
-      const children = items.slice(1, 1 + parenCount);
-      const rest = items.slice(1 + parenCount);
-      // Summary chunk: parent + just the sub-headings (titles only, no explanations)
-      const summaryItem = parentTitle + '\n' + children.map(item => firstLine(item)).join('\n');
-      // Individual chunks: parent + each sub-item (with full explanation)
-      const subChunks = children.map(item => parentTitle + '\n' + item);
-      // Replace items: summary + expanded sub-items + any remaining items
-      const expanded = [summaryItem, ...subChunks, ...rest];
-      const CHUNK_SIZE = 12;
-      const chunks = [];
-      for (let i = 0; i < expanded.length; i += CHUNK_SIZE) {
-        chunks.push(expanded.slice(i, i + CHUNK_SIZE).join('\n\n'));
-      }
-      return chunks;
-    }
+    paras.push(merged);
   }
 
-  // If fewer than 2 items detected but text is long, force-split by blank lines
-  if (items.length <= 1) {
-    if (text.length > 2000) {
-      const blocks = text.split(/\n\s*\n/).filter(b => b.trim().length > 30);
-      if (blocks.length > 1) {
-        const forcedChunks = [];
-        let currentChunk = '';
-        for (const block of blocks) {
-          if ((currentChunk + '\n\n' + block).length > 3000 && currentChunk) {
-            forcedChunks.push(currentChunk.trim());
-            currentChunk = block;
-          } else {
-            currentChunk += (currentChunk ? '\n\n' : '') + block;
-          }
-        }
-        if (currentChunk.trim()) forcedChunks.push(currentChunk.trim());
-        if (forcedChunks.length > 1) return forcedChunks;
-      }
-    }
-    return [text];
-  }
-
-  // Default: group into chunks of ~12 items
-  const CHUNK_SIZE = 12;
+  const MAX_CHUNK = 3000; // characters per chunk — leaves breathing room for AI output
   const chunks = [];
-  for (let i = 0; i < items.length; i += CHUNK_SIZE) {
-    chunks.push(items.slice(i, i + CHUNK_SIZE).join('\n\n'));
+  let current = '';
+  for (const para of paras) {
+    const candidate = current ? current + '\n\n' + para : para;
+    if (candidate.length > MAX_CHUNK && current) {
+      chunks.push(current.trim());
+      current = para;
+    } else {
+      current = candidate;
+    }
   }
-  return chunks;
+  if (current.trim()) chunks.push(current.trim());
+  return chunks.length > 0 ? chunks : [text];
 }
 let _pendingText = null;  // 预检通过待生成的文本
 
@@ -2774,16 +2707,9 @@ async function aiGenerate() {
 
   // Pre-check: split locally and show preview
   const chunks = splitIntoChunks(text);
-  // Count items using same patterns as splitIntoChunks
-  const CN_NUM = '[一二三四五六七八九十]+';
-  const AR_NUM = '\\d{1,3}';
-  const itemRe = new RegExp(`^(${CN_NUM}|${AR_NUM})[、.）\\)]\\s`, 'gm');
-  const kpRe = /^考点\s*\d{1,2}\s*[：:]/gm;       // 考点1： 考点2：
-  const chRe = /^第[一二三四五六七八九十\d]{1,3}章/gm; // 第一章 第2章
-  const estimatedOld = (text.match(itemRe) || []).length;
-  const estimatedKP = (text.match(kpRe) || []).length;
-  const estimatedCh = (text.match(chRe) || []).length;
-  const estimatedItems = Math.max(estimatedOld, estimatedKP, estimatedCh);
+  // Estimate knowledge points from paragraph count (rough: ~3 paras per KP)
+  const paraCount = text.split(/\n\n|\n/).filter(p => p.trim()).length;
+  const estimatedItems = Math.max(1, Math.round(paraCount / 3));
   const estimatedTokens = chunks.length * 4000;
 
   panel.style.display = 'none';
@@ -2823,7 +2749,8 @@ async function aiGenerate() {
   // Store original text for recovery
   window._preCheckOriginal = originalText;
 
-  if (!estimatedItems || estimatedItems < 1) {
+  // Warn if text is dense and unstructured (very few paragraphs for its length)
+  if (paraCount < 3 && text.length > 1000) {
     document.getElementById('preCheckWarning').style.display = '';
   }
 
