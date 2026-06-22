@@ -1293,9 +1293,117 @@ async function callDeepSeekAPI(userText, onChunk) {
     }
   }
 
-  // Strip markdown code fences if present
+  // Strip markdown code fences if present, then safe-parse
   let content = fullContent.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
-  return JSON.parse(content);
+  return safeParseJSON(content, fullContent);
+}
+
+// ──────────────────────────────────────
+// JSON repair — handles common LLM output issues
+// ──────────────────────────────────────
+function safeParseJSON(text, rawForDebug) {
+  let firstErr = null;
+
+  // Strategy 1: direct parse (fast path)
+  try { return JSON.parse(text); } catch (e) { firstErr = e; }
+
+  // Strategy 2: aggressive markdown fence removal
+  let cleaned = text
+    .replace(/```json\s*/gi, '')
+    .replace(/```\s*/g, '')
+    .trim();
+  try { return JSON.parse(cleaned); } catch (e) {}
+
+  // Strategy 3: fix trailing commas (common LLM mistake)
+  cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+  try { return JSON.parse(cleaned); } catch (e) {}
+
+  // Strategy 4: extract outermost JSON object/array boundaries
+  const firstBrace = cleaned.indexOf('{');
+  const firstBracket = cleaned.indexOf('[');
+  let start = -1, end = -1;
+  if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+    start = firstBrace;
+    end = cleaned.lastIndexOf('}');
+  } else if (firstBracket !== -1) {
+    start = firstBracket;
+    end = cleaned.lastIndexOf(']');
+  }
+  if (start !== -1 && end > start) {
+    try { return JSON.parse(cleaned.slice(start, end + 1)); } catch (e) {}
+  }
+
+  // Strategy 5: repair unescaped characters inside JSON strings.
+  // Common when LLM copies source text verbatim into JSON values —
+  // the source may contain raw ", \, or control characters.
+  const repaired = _repairStringEscaping(cleaned);
+  try { return JSON.parse(repaired); } catch (e) {}
+
+  // Strategy 6: last resort — combine strategies 3+5
+  const r2 = repaired.replace(/,(\s*[}\]])/g, '$1');
+  try { return JSON.parse(r2); } catch (e) {}
+
+  // All strategies failed — throw with debug context
+  const errMsg = firstErr ? firstErr.message : '';
+  const errPos = parseInt((errMsg.match(/position (\d+)/) || [])[1]) || 0;
+  const ctxStart = Math.max(0, errPos - 80);
+  const ctxEnd = Math.min(text.length, errPos + 80);
+  const context = text.slice(ctxStart, ctxEnd);
+  const pointer = ' '.repeat(Math.min(80, errPos - ctxStart)) + '^^^';
+  throw new Error(
+    `AI 返回了格式不合法的 JSON，解析失败。\n` +
+    `错误位置 ${errPos} 附近的内容：\n` +
+    `${context}\n${pointer}\n` +
+    `请重试，或尝试将知识点文本分批更小后重新生成。`
+  );
+}
+
+// Heuristic repair: find JSON string values and escape internal " characters.
+// Uses dual context (look-behind + look-ahead) to distinguish structural quotes
+// from unescaped content quotes that the LLM copied verbatim from source text.
+function _repairStringEscaping(text) {
+  let out = '';
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) {
+      out += ch;
+      escape = false;
+      continue;
+    }
+    if (ch === '\\') {
+      out += ch;
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      if (inString) {
+        // We're inside a string. A " is a closing quote ONLY if followed by
+        // whitespace then a JSON structural character (, } ]) or colon (key-value separator).
+        const rest = text.slice(i + 1);
+        if (/^\s*[,}\]:]/.test(rest)) {
+          out += ch;
+          inString = false;
+        } else {
+          out += '\\"'; // unescaped quote inside string value
+        }
+      } else {
+        // Not in a string. A " is an opening quote ONLY if preceded by
+        // a JSON structural character (: { [ ,) with optional whitespace.
+        const before = out; // use output so far (already processed)
+        if (/[{\[:,]\s*$/.test(before)) {
+          out += ch;
+          inString = true;
+        } else {
+          out += '\\"'; // stray quote — escape it
+        }
+      }
+    } else {
+      out += ch;
+    }
+  }
+  return out;
 }
 
 // Assign batch numbers to newly imported KPs
@@ -1897,7 +2005,7 @@ function checkFillAnswer(userAns, correctAns) {
 }
 
 // 将选择题解析中的原始字母引用替换为混排后的字母
-// 只替换中文语境下的明确模式（选项A / A选项），避免误伤"维生素A"等
+// 只替换中文语境下的明确模式，避免误伤"维生素A"等术语
 function translateChoiceExplanation(explanation, letterMap) {
   if (!explanation || !letterMap) return explanation;
   let result = explanation;
@@ -1910,6 +2018,26 @@ function translateChoiceExplanation(explanation, letterMap) {
   result = result.replace(/([A-Da-d])选项/g, (_, letter) => {
     const upper = letter.toUpperCase();
     return (letterMap[upper] || upper) + '选项';
+  });
+  // 答案为A / 答案是A / 答案：A / 答案:A
+  result = result.replace(/(答案(?:为|是|[：:]))\s*([A-Da-d])/g, (_, prefix, letter) => {
+    const upper = letter.toUpperCase();
+    return prefix + (letterMap[upper] || upper);
+  });
+  // 选A / 选择A
+  result = result.replace(/(选(?:择)?)\s*([A-Da-d])/g, (_, prefix, letter) => {
+    const upper = letter.toUpperCase();
+    return prefix + (letterMap[upper] || upper);
+  });
+  // A项 / 第A项
+  result = result.replace(/(第?)([A-Da-d])项/g, (_, prefix, letter) => {
+    const upper = letter.toUpperCase();
+    return prefix + (letterMap[upper] || upper) + '项';
+  });
+  // 正确选项为A / 正确选项是A / 正确选项：A
+  result = result.replace(/(正确选项(?:为|是|[：:]))\s*([A-Da-d])/g, (_, prefix, letter) => {
+    const upper = letter.toUpperCase();
+    return prefix + (letterMap[upper] || upper);
   });
   return result;
 }
