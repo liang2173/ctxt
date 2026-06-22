@@ -1600,25 +1600,25 @@ function renderStudy() {
     document.getElementById('modeTabs').style.display = '';
     return;
   }
+
+  // Check batch completion first — even for the last batch, show summary
+  const p = proj();
+  const activeBatch = p.activeBatch || 1;
+  const maxBatch = Math.max(...p.kps.map(k => k.batch || 1), 1);
+  if (studyMode === 'normal' && !p.reviewMode && activeBatch <= maxBatch) {
+    const batchKPs = p.kps.filter(kp => !kp.hidden && (kp.batch || 1) === activeBatch && kp.currentLevel !== 'mastered');
+    if (batchKPs.length === 0) {
+      buildBatchSummary(activeBatch);
+      return;
+    }
+  }
+
+  // Only show "all mastered" if no batch summary was triggered
   if (mastered >= total && total > 0) {
     empty.style.display = 'none'; card.style.display = 'none'; done.style.display = '';
     document.getElementById('batchSummary').style.display = 'none';
     if (!proj()._celebrated) { showCelebration(); proj()._celebrated = true; }
     return;
-  }
-
-  // Check batch completion before selecting next question
-  const p = proj();
-  const activeBatch = p.activeBatch || 1;
-  if (studyMode === 'normal' && !p.reviewMode) {
-    const batchKPs = p.kps.filter(kp => !kp.hidden && (kp.batch || 1) === activeBatch && kp.currentLevel !== 'mastered');
-    if (batchKPs.length === 0) {
-      const maxBatch = Math.max(...p.kps.map(k => k.batch || 1), 1);
-      if (activeBatch < maxBatch) {
-        buildBatchSummary(activeBatch);
-        return;
-      }
-    }
   }
 
   proj()._celebrated = false;
@@ -2275,7 +2275,9 @@ function buildBatchSummary(batchNum) {
     <p style="font-size:.75rem;color:var(--text-muted);margin-bottom:16px;">📋 以下是本批次全部知识点原文，请逐条复检确认掌握情况。标记 ⚠薄弱 的为建议重点回顾。</p>
     <div class="batch-kp-list">${kpCards}</div>
     <div style="margin-top:20px;">
-      <button class="btn btn-primary btn-lg" onclick="advanceToNextBatch()">进入第 ${batchNum + 1} 批</button>
+      ${batchNum < Math.max(...p.kps.map(k => k.batch || 1), 1)
+        ? `<button class="btn btn-primary btn-lg" onclick="advanceToNextBatch()">进入第 ${batchNum + 1} 批</button>`
+        : `<button class="btn btn-primary btn-lg" onclick="advanceToNextBatch()">✅ 完成，返回学习</button>`}
     </div>
   `;
 
@@ -2289,12 +2291,21 @@ function buildBatchSummary(batchNum) {
 
 function advanceToNextBatch() {
   const p = proj();
-  p.activeBatch = _pendingBatchNum + 1;
+  const maxBatch = Math.max(...p.kps.map(k => k.batch || 1), 1);
+  if (_pendingBatchNum < maxBatch) {
+    p.activeBatch = _pendingBatchNum + 1;
+    saveData(data);
+    document.getElementById('batchSummary').style.display = 'none';
+    document.getElementById('modeTabs').style.display = '';
+    toast(`已进入第 ${p.activeBatch} 批`, 'success');
+  } else {
+    // Last batch done — bump past maxBatch so renderStudy won't re-trigger summary
+    p.activeBatch = maxBatch + 1;
+    saveData(data);
+    document.getElementById('batchSummary').style.display = 'none';
+    document.getElementById('modeTabs').style.display = '';
+  }
   _pendingBatchNum = 0;
-  saveData(data);
-  document.getElementById('batchSummary').style.display = 'none';
-  document.getElementById('modeTabs').style.display = '';
-  toast(`已进入第 ${p.activeBatch} 批`, 'success');
   renderStudy();
 }
 
