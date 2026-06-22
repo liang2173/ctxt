@@ -1622,6 +1622,8 @@ function renderStudy() {
 
   const selected = selectNextQuestion();
   if (!selected) {
+    // selectNextQuestion may have already shown batchSummary; don't override it
+    if (document.getElementById('batchSummary').style.display !== 'none') return;
     // All done or all in cooling pool
     card.style.display = 'none'; done.style.display = '';
     return;
