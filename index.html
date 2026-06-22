@@ -2635,7 +2635,7 @@ function splitIntoChunks(text) {
     paras.push(merged);
   }
 
-  const MAX_CHUNK = 3000; // characters per chunk — leaves breathing room for AI output
+  const MAX_CHUNK = 2000; // chars per chunk — enough content for ~8 KPs, safe for 8192 token output
   const chunks = [];
   let current = '';
   for (const para of paras) {
@@ -2835,32 +2835,40 @@ async function doGenerate(text) {
 
       let chunkKpCount = 0, chunkHasChoice = false, chunkHasFill = false, chunkHasShort = false;
 
-      const result = await callDeepSeekAPI(chunk, (accumulated) => {
-        const kpMatches = accumulated.match(/"id"\s*:\s*"kp_/g);
-        if (kpMatches && kpMatches.length > chunkKpCount) {
-          chunkKpCount = kpMatches.length;
-          document.getElementById('stageAnalyze').className = 'ai-stage done';
-        }
-        if (!chunkHasChoice && accumulated.includes('"choice"')) {
-          chunkHasChoice = true; document.getElementById('stageChoice').className = 'ai-stage active';
-        }
-        if (accumulated.includes('"fill_blank"') && !chunkHasFill) {
-          chunkHasFill = true; document.getElementById('stageChoice').className = 'ai-stage done';
-          document.getElementById('stageFill').className = 'ai-stage active';
-        }
-        if (accumulated.includes('"short_answer"') && !chunkHasShort) {
-          chunkHasShort = true; document.getElementById('stageFill').className = 'ai-stage done';
-          document.getElementById('stageShort').className = 'ai-stage active';
-        }
-        const overallPct = Math.round(((ci + Math.min(0.9, accumulated.length / Math.max(accumulated.length + 600, 2000))) / chunks.length) * 100);
-        document.getElementById('aiProgressFill').style.width = Math.min(95, overallPct) + '%';
-        document.getElementById('aiProgressText').textContent = chunkLabel
-          ? `${chunkLabel} · 已识别 ${chunkKpCount} 个知识点 · ${accumulated.length} 字符`
-          : `已识别 ${chunkKpCount} 个知识点 · ${accumulated.length} 字符`;
-        streamContent.textContent = accumulated;
-      });
+      let chunkKPs = [];
+      try {
+        const result = await callDeepSeekAPI(chunk, (accumulated) => {
+          const kpMatches = accumulated.match(/"id"\s*:\s*"kp_/g);
+          if (kpMatches && kpMatches.length > chunkKpCount) {
+            chunkKpCount = kpMatches.length;
+            document.getElementById('stageAnalyze').className = 'ai-stage done';
+          }
+          if (!chunkHasChoice && accumulated.includes('"choice"')) {
+            chunkHasChoice = true; document.getElementById('stageChoice').className = 'ai-stage active';
+          }
+          if (accumulated.includes('"fill_blank"') && !chunkHasFill) {
+            chunkHasFill = true; document.getElementById('stageChoice').className = 'ai-stage done';
+            document.getElementById('stageFill').className = 'ai-stage active';
+          }
+          if (accumulated.includes('"short_answer"') && !chunkHasShort) {
+            chunkHasShort = true; document.getElementById('stageFill').className = 'ai-stage done';
+            document.getElementById('stageShort').className = 'ai-stage active';
+          }
+          const overallPct = Math.round(((ci + Math.min(0.9, accumulated.length / Math.max(accumulated.length + 600, 2000))) / chunks.length) * 100);
+          document.getElementById('aiProgressFill').style.width = Math.min(95, overallPct) + '%';
+          document.getElementById('aiProgressText').textContent = chunkLabel
+            ? `${chunkLabel} · 已识别 ${chunkKpCount} 个知识点 · ${accumulated.length} 字符`
+            : `已识别 ${chunkKpCount} 个知识点 · ${accumulated.length} 字符`;
+          streamContent.textContent = accumulated;
+        });
 
-      const chunkKPs = parseAIResult(result);
+        chunkKPs = parseAIResult(result);
+      } catch (e) {
+        if (chunks.length === 1) throw e;
+        toast(`⚠️ 第${ci + 1}/${chunks.length}批解析失败（${e.message.slice(0, 40)}...），已跳过，建议补导该段文本`, 'error');
+        continue;
+      }
+
       if (chunkKPs.length === 0) {
         if (chunks.length === 1) {
           throw new Error('AI 未能生成有效题目，请检查知识点文本格式');
