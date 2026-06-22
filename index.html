@@ -892,16 +892,6 @@ function selectNextQuestion() {
   const batchFilter = (studyMode !== 'normal' || p.reviewMode) ? () => true : (kp => (kp.batch || 1) === activeBatch);
   const allAvailable = baseKPs.filter(batchFilter);
 
-  // If current batch is complete but more batches exist, auto-advance (only in normal mode)
-  if (allAvailable.length === 0 && studyMode === 'normal' && !p.reviewMode) {
-    const maxBatch = Math.max(...p.kps.map(k => k.batch || 1), 1);
-    if (activeBatch < maxBatch) {
-      // Show batch summary before advancing
-      buildBatchSummary(activeBatch);
-      return null;
-    }
-    return null;
-  }
   if (allAvailable.length === 0) return null;
   const available = allAvailable;
 
@@ -1606,14 +1596,29 @@ function renderStudy() {
 
   if (total === 0) {
     empty.style.display = ''; card.style.display = 'none'; done.style.display = 'none';
-  document.getElementById('batchSummary').style.display = 'none';
-  document.getElementById('modeTabs').style.display = '';
+    document.getElementById('batchSummary').style.display = 'none';
+    document.getElementById('modeTabs').style.display = '';
     return;
   }
   if (mastered >= total && total > 0) {
     empty.style.display = 'none'; card.style.display = 'none'; done.style.display = '';
+    document.getElementById('batchSummary').style.display = 'none';
     if (!proj()._celebrated) { showCelebration(); proj()._celebrated = true; }
     return;
+  }
+
+  // Check batch completion before selecting next question
+  const p = proj();
+  const activeBatch = p.activeBatch || 1;
+  if (studyMode === 'normal' && !p.reviewMode) {
+    const batchKPs = p.kps.filter(kp => !kp.hidden && (kp.batch || 1) === activeBatch && kp.currentLevel !== 'mastered');
+    if (batchKPs.length === 0) {
+      const maxBatch = Math.max(...p.kps.map(k => k.batch || 1), 1);
+      if (activeBatch < maxBatch) {
+        buildBatchSummary(activeBatch);
+        return;
+      }
+    }
   }
 
   proj()._celebrated = false;
@@ -1622,8 +1627,6 @@ function renderStudy() {
 
   const selected = selectNextQuestion();
   if (!selected) {
-    // selectNextQuestion may have already shown batchSummary; don't override it
-    if (document.getElementById('batchSummary').style.display !== 'none') return;
     // All done or all in cooling pool
     card.style.display = 'none'; done.style.display = '';
     return;
