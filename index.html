@@ -312,10 +312,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 <!-- Study View -->
 <div id="view-study" class="view">
   <!-- Mode tabs -->
-  <div class="mode-tabs" id="modeTabs">
+  <div class="mode-tabs" id="modeTabs" style="flex-wrap:wrap;gap:4px;">
     <button class="mode-tab active" data-mode="normal" onclick="setStudyMode('normal')">全部题目</button>
     <button class="mode-tab" data-mode="wrongbook" onclick="setStudyMode('wrongbook')">★ 错题本</button>
     <button class="mode-tab" data-mode="understand" onclick="setStudyMode('understand')">! 仅了解</button>
+    <select id="batchSelect" onchange="switchBatch(parseInt(this.value))" style="display:none;margin-left:8px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.8rem;background:var(--card);color:var(--text);cursor:pointer;max-width:200px;"></select>
   </div>
   <!-- Wrongbook sub-tabs -->
   <div class="mode-subtabs" id="wrongbookSubtabs" style="display:none;">
@@ -476,7 +477,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <h3 id="kpListTitle">知识点列表</h3>
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-sm btn-ghost" onclick="exportData()">导出数据</button>
+        <button class="btn btn-sm btn-ghost" onclick="exportCurrentProject()">导出本项目</button>
+        <button class="btn btn-sm btn-ghost" onclick="exportData()">导出全部</button>
         <button class="btn btn-sm btn-danger" onclick="clearAll()">清空全部</button>
       </div>
     </div>
@@ -539,7 +541,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
   <div class="card">
     <h3 style="margin-bottom:16px;">数据管理</h3>
     <div class="btn-row">
-      <button class="btn btn-primary" onclick="exportData()">导出题库 (JSON)</button>
+      <button class="btn btn-primary" onclick="exportCurrentProject()">导出当前项目 (JSON)</button>
+      <button class="btn btn-ghost" onclick="exportData()">导出全部项目 (JSON)</button>
       <button class="btn btn-ghost" onclick="document.getElementById('importFileInput').click()">导入题库 (JSON)</button>
       <input type="file" id="importFileInput" accept=".json" style="display:none;" onchange="importData(event)">
       <button class="btn btn-danger" onclick="clearAll()">清空所有数据</button>
@@ -715,9 +718,26 @@ const DocxParser = {
         // Reset counters when encountering non-numbered paragraph? No — keep them.
       }
 
-      const tNodes = p.getElementsByTagNameNS(NS, 't');
+      // Iterate runs to preserve bold formatting as **...** marks
+      const runs = p.getElementsByTagNameNS(NS, 'r');
       let txt = '';
-      for (const t of tNodes) { txt += t.textContent || ''; }
+      for (const r of runs) {
+        const rPr = r.getElementsByTagNameNS(NS, 'rPr')[0];
+        let isBold = false;
+        if (rPr) {
+          const bEl = rPr.getElementsByTagNameNS(NS, 'b')[0];
+          if (bEl) {
+            const val = bEl.getAttributeNS(NS, 'val') || bEl.getAttribute('w:val');
+            isBold = val !== 'false' && val !== '0';
+          }
+        }
+        const tNodes = r.getElementsByTagNameNS(NS, 't');
+        let runText = '';
+        for (const t of tNodes) { runText += t.textContent || ''; }
+        if (runText) {
+          txt += isBold ? '**' + runText + '**' : runText;
+        }
+      }
       if (txt.trim()) {
         result.push(autoNum ? autoNum + txt.trim() : txt.trim());
       } else if (autoNum) {
@@ -733,12 +753,12 @@ const DocxParser = {
 // 3. DATA STORE
 // ──────────────────────────────────────
 const STORE_KEY = 'quiz_app_data';
+const BACKUP_KEY = 'quiz_app_data_backup';
 const SETTINGS_KEY = 'quiz_app_settings';
 
 function loadData() {
-  try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (!raw) return { projects: [], activeProjectId: null };
+  const tryParse = (raw) => {
+    if (!raw) return null;
     const parsed = JSON.parse(raw);
     // Migrate old flat format to project-based format
     if (!parsed.projects && parsed.kps) {
@@ -755,10 +775,47 @@ function loadData() {
     }
     if (!parsed.projects) parsed.projects = [];
     return parsed;
-  } catch { return { projects: [], activeProjectId: null }; }
+  };
+
+  // Fast path: raw parse only, no migrations — used for backup recovery
+  const rawParse = (raw) => {
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (obj && obj.projects && obj.projects.length > 0) return obj;
+    return null;
+  };
+
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return { projects: [], activeProjectId: null };
+    const result = tryParse(raw);
+    if (result) return result;
+    // tryParse returned null (should not happen for valid raw, but guard)
+    return { projects: [], activeProjectId: null };
+  } catch {
+    // Main data corrupted or migration bug — try backup with minimal processing
+    try {
+      const backupRaw = localStorage.getItem(BACKUP_KEY);
+      const recovered = rawParse(backupRaw);  // skip migrations, use as-is
+      if (recovered) {
+        // Restore backup to main key so next load succeeds
+        localStorage.setItem(STORE_KEY, backupRaw);
+        setTimeout(() => toast('⚠️ 检测到数据异常，已从本地备份恢复上次进度', 'warning'), 800);
+        return recovered;
+      }
+    } catch {}
+    return { projects: [], activeProjectId: null };
+  }
 }
 
-function saveData(d) { try { localStorage.setItem(STORE_KEY, JSON.stringify(d)); } catch(e) { toast('存储空间不足，请清理一些数据', 'error'); } }
+function saveData(d) {
+  try {
+    const json = JSON.stringify(d);
+    // Write backup first, then main — so backup always has the last good state
+    localStorage.setItem(BACKUP_KEY, json);
+    localStorage.setItem(STORE_KEY, json);
+  } catch(e) { toast('存储空间不足，请清理一些数据', 'error'); }
+}
 
 // Active project helper — always returns a valid project, creating one if needed
 function proj() {
@@ -905,12 +962,16 @@ function selectNextQuestion() {
       qs = qs.filter(q => !q.understandOnly);
       if (qs.length === 0) { candidates.push({ kp, question: null }); continue; }
     }
+    let kpHasCandidate = false;
     for (const q of qs) {
       if ((q.streak || 0) >= getReq(kp)) continue;
       if (!proj().coolingPool.includes(q.id)) {
         candidates.push({ kp, question: q });
+        kpHasCandidate = true;
       }
     }
+    // All questions at this level have reached required streak — auto-promote
+    if (!kpHasCandidate) { candidates.push({ kp, question: null }); }
   }
 
   // Step 2: relax cooling pool if all candidates were hidden
@@ -922,10 +983,13 @@ function selectNextQuestion() {
         qs = qs.filter(q => !q.understandOnly);
         if (qs.length === 0) continue;
       }
+      let kpHasCandidate = false;
       for (const q of qs) {
         if ((q.streak || 0) >= getReq(kp)) continue;
         candidates.push({ kp, question: q });
+        kpHasCandidate = true;
       }
+      if (!kpHasCandidate) { candidates.push({ kp, question: null }); }
     }
   }
 
@@ -1190,6 +1254,13 @@ const SYSTEM_PROMPT = `你是一个记忆辅助刷题系统的题目生成器。
 - 禁止生成需要用户发表个人观点或联系实际的题目
 - 禁止生成"用XX理论分析YY现象""结合材料谈谈……"类题目
 - 所有题目只考查"原文写了什么"，不考查"你怎么理解"或"你会怎么用"
+
+### 加粗术语（格式提示）
+
+原文中被 \`**\` 包裹的词语是原文作者加粗强调的核心概念。请在出题时：
+- 选择题的正确选项和干扰项应优先围绕这些核心概念设计
+- 填空题的 \`____\` 处应优先选择这些术语
+- 简答题的关键词列表应包含这些术语
 
 ---
 
@@ -1587,6 +1658,7 @@ function renderEmptyState() {
 function renderStudy() {
   renderEmptyState();
   updateTopBar();
+  try { updateBatchSelect(); } catch(e) { console.warn('updateBatchSelect:', e); }
 
   const mastered = getMasteredCount();
   const total = getTotalActive();
@@ -1627,6 +1699,23 @@ function renderStudy() {
 
   const selected = selectNextQuestion();
   if (!selected) {
+    // Safety net: if there are still unmastered KPs in the current batch,
+    // they may be stuck at a level where all questions have sufficient streak.
+    // Directly promote one to unblock the batch.
+    const p2 = proj();
+    const ab2 = p2.activeBatch || 1;
+    const mb2 = Math.max(...p2.kps.map(k => k.batch || 1), 1);
+    if (studyMode === 'normal' && !p2.reviewMode && ab2 <= mb2) {
+      const stuck = p2.kps.find(kp => !kp.hidden && (kp.batch || 1) === ab2 && kp.currentLevel !== 'mastered');
+      if (stuck) {
+        const next = getNextLevel(stuck);
+        if (next) { stuck.currentLevel = next; stuck._justAdvanced = true; }
+        else { stuck.currentLevel = 'mastered'; stuck.masteredAt = Date.now(); }
+        saveData(data);
+        renderStudy();
+        return;
+      }
+    }
     // All done or all in cooling pool
     card.style.display = 'none'; done.style.display = '';
     return;
@@ -2114,6 +2203,38 @@ function setWrongbookSub(sub) {
   document.querySelectorAll('.mode-subtab').forEach(t => t.classList.remove('active'));
   document.querySelector(`[data-sub="${sub}"]`).classList.add('active');
   renderStudy();
+}
+
+function switchBatch(batchNum) {
+  const p = proj();
+  const maxBatch = Math.max(...p.kps.map(k => k.batch || 1), 1);
+  if (batchNum < 1 || batchNum > maxBatch) return;
+  p.activeBatch = batchNum;
+  saveData(data);
+  renderStudy();
+}
+
+function updateBatchSelect() {
+  const sel = document.getElementById('batchSelect');
+  if (!sel) return;
+  const p = proj();
+  const maxBatch = Math.max(...p.kps.map(k => k.batch || 1), 1);
+  const activeBatch = p.activeBatch || 1;
+  if (maxBatch <= 1 || studyMode !== 'normal' || p.reviewMode) {
+    sel.style.display = 'none';
+    return;
+  }
+  sel.style.display = '';
+  let html = '';
+  for (let b = 1; b <= maxBatch; b++) {
+    const batchKPs = p.kps.filter(k => !k.hidden && (k.batch || 1) === b);
+    const mastered = batchKPs.filter(k => k.currentLevel === 'mastered').length;
+    const total = batchKPs.length;
+    const pct = total > 0 ? Math.round((mastered / total) * 100) : 0;
+    const selAttr = b === activeBatch ? ' selected' : '';
+    html += '<option value="' + b + '"' + selAttr + '>第' + b + '批 ' + mastered + '/' + total + ' (' + pct + '%)</option>';
+  }
+  sel.innerHTML = html;
 }
 
 function renderUnderstandList() {
@@ -2627,43 +2748,105 @@ function resetKP(kpId) {
 // 10. IMPORT / EXPORT
 // ──────────────────────────────────────
 
-// Smart splitting: detect numbered items, handling Arabic/Chinese numerals and sub-items.
-// Key design: （数字）patterns (like （1）（2）) are treated as MAIN item boundaries,
-// so each sub-point becomes its own chunk. A summary chunk covering just the headings
-// is also generated so the user can learn the overall framework first.
-// Split text into API-sized chunks at paragraph boundaries.
-// No regex guesswork — just paragraph capacity. The AI's prompt already handles
-// structural understanding; our only job is to not overflow its output tokens.
+// Split text into API-sized chunks at paragraph boundaries, preferring
+// top-level numbered item boundaries to avoid cutting mid-concept.
+// Also protects parallel short-list items from being merged.
 function splitIntoChunks(text) {
   // Split into paragraphs: DOCX uses \n\n, pasted text uses \n
   const rawParas = text.split(/\n\n|\n/).map(p => p.trim()).filter(p => p.length > 0);
   if (rawParas.length === 0) return [text];
 
-  // Merge very short adjacent paragraphs (bare titles like "第一章" that sit alone)
-  const paras = [];
+  // Detect top-level item boundaries: e.g. "1、…" "26．…" "30.…"
+  // Must start with 1-2 digits, then Chinese/JP punctuation, then Chinese char
+  const TOP_RE = /^\d{1,2}[、．.]\s*[一-鿿]/;
+  const isTop = (p) => TOP_RE.test(p);
+
+  // Plan C: detect parallel short-list runs (≥2 consecutive short paragraphs
+  // without numbering, similar length). These are characteristic lists that
+  // should not be merged into a blob.
+  const isShortPlain = (p) => {
+    const len = p.length;
+    return len >= 5 && len <= 60 && !/^[\d(（①②③④⑤⑥⑦⑧⑨⑩第]/.test(p);
+  };
+  const parallelSet = new Set();
   for (let i = 0; i < rawParas.length; ) {
-    let merged = rawParas[i];
-    i++;
-    while (i < rawParas.length && merged.length < 60) {
-      merged += '\n' + rawParas[i];
+    if (isShortPlain(rawParas[i])) {
+      let j = i + 1;
+      while (j < rawParas.length && isShortPlain(rawParas[j])) j++;
+      if (j - i >= 2) {
+        for (let k = i; k < j; k++) parallelSet.add(k);
+      }
+      i = j;
+    } else {
       i++;
     }
-    paras.push(merged);
   }
 
-  const MAX_CHUNK = 2000; // chars per chunk — enough content for ~8 KPs, safe for 8192 token output
+  // Merge very short adjacent paragraphs (bare titles like "第一章").
+  // Preserve parallel list groups — join them with ； instead of merging.
+  const paras = [];
+  for (let i = 0; i < rawParas.length; ) {
+    if (parallelSet.has(i)) {
+      let group = rawParas[i];
+      i++;
+      while (i < rawParas.length && parallelSet.has(i)) {
+        group += '；' + rawParas[i];
+        i++;
+      }
+      paras.push(group);
+    } else {
+      let merged = rawParas[i];
+      i++;
+      while (i < rawParas.length && !parallelSet.has(i) && merged.length < 60) {
+        merged += '\n' + rawParas[i];
+        i++;
+      }
+      paras.push(merged);
+    }
+  }
+
+  const MAX_CHUNK = 2000; // chars per chunk — enough for ~8 KPs, safe for 8192 token output
   const chunks = [];
   let current = '';
-  for (const para of paras) {
+  for (let i = 0; i < paras.length; i++) {
+    const para = paras[i];
     const candidate = current ? current + '\n\n' + para : para;
     if (candidate.length > MAX_CHUNK && current) {
-      chunks.push(current.trim());
-      current = para;
+      // Prefer cutting at a top-level boundary within the next 3 paragraphs
+      let cutAt = i; // default: cut before current paragraph
+      for (let look = i; look < Math.min(i + 3, paras.length); look++) {
+        if (isTop(paras[look])) {
+          // Found a boundary — include intermediate paragraphs in this chunk
+          let extended = current;
+          for (let k = i; k < look; k++) {
+            extended += '\n\n' + paras[k];
+          }
+          // Only extend if it doesn't blow up the chunk too much
+          if (extended.length < MAX_CHUNK * 1.5) {
+            chunks.push(extended.trim());
+            current = '';
+            i = look - 1; // will be incremented by loop to start at `look`
+            cutAt = -1;   // signal that we already handled the cut
+            break;
+          }
+          break;
+        }
+      }
+      if (cutAt >= 0) {
+        chunks.push(current.trim());
+        current = para;
+      }
     } else {
       current = candidate;
     }
   }
   if (current.trim()) chunks.push(current.trim());
+
+  // Add brief context to chunks after the first
+  for (let c = 1; c < chunks.length; c++) {
+    chunks[c] = '[接上文，第' + (c + 1) + '/' + chunks.length + '块] ' + chunks[c];
+  }
+
   return chunks.length > 0 ? chunks : [text];
 }
 let _pendingText = null;  // 预检通过待生成的文本
@@ -2983,25 +3166,39 @@ function manualImport() {
 }
 
 function exportData() {
-  const exportObj = { projects: data.projects, activeProjectId: data.activeProjectId, version: '3.0', exportedAt: new Date().toISOString() };
+  const exportObj = { type: 'full_backup', projects: data.projects, activeProjectId: data.activeProjectId, version: '3.0', exportedAt: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = `quiz-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.href = url; a.download = 'quiz-all-backup-' + new Date().toISOString().slice(0,10) + '.json';
   a.click();
   URL.revokeObjectURL(url);
   toast('全部项目已导出，请妥善保存此文件', 'success');
 }
 
-// Silent auto-backup — no toast, just downloads
+function exportCurrentProject() {
+  const p = proj();
+  if (!p || (p.kps || []).length === 0) { toast('当前项目没有知识点，无需导出', 'error'); return; }
+  const exportObj = { type: 'single_project', projectName: p.name, project: p, version: '3.0', exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const safeName = p.name.replace(/[\\/:*?"<>|]/g, '-').slice(0, 30);
+  a.href = url; a.download = 'quiz-' + safeName + '-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('"' + p.name + '" 已导出（不含其他项目进度）', 'success');
+}
+
+// Silent auto-backup — no toast, just downloads (always full backup for safety)
 function autoBackup() {
   try {
-    const exportObj = { projects: data.projects, activeProjectId: data.activeProjectId, version: '3.0', exportedAt: new Date().toISOString() };
+    const exportObj = { type: 'full_backup', projects: data.projects, activeProjectId: data.activeProjectId, version: '3.0', exportedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const ts = new Date().toISOString().slice(0,16).replace(/:/g,'-');
-    a.href = url; a.download = `quiz-autobackup-${ts}.json`;
+    a.href = url; a.download = 'quiz-autobackup-' + ts + '.json';
     a.click();
     URL.revokeObjectURL(url);
   } catch(e) { /* silent fail */ }
@@ -3014,36 +3211,80 @@ function importData(event) {
   reader.onload = function() {
     try {
       const imported = JSON.parse(reader.result);
-      // Detect multi-project backup
-      if (imported.projects && imported.projects.length > 1) {
-        if (confirm(`检测到 ${imported.projects.length} 个项目的完整备份。\n\n"确定"=恢复全部项目（覆盖当前数据）\n"取消"=仅将题目合并到当前项目"${proj().name}"`)) {
+
+      // ── Single-project export ──
+      if (imported.type === 'single_project' && imported.project) {
+        const p = imported.project;
+        const pName = imported.projectName || p.name || '未命名';
+        const kpCount = (p.kps || []).length;
+        const choice = confirm(
+          '检测到单项目导出：' + pName + '（' + kpCount + ' 个知识点）\n\n' +
+          '"确定" = 作为新项目添加（保留现有项目不受影响）\n' +
+          '"取消" = 合并到当前项目 "' + proj().name + '"'
+        );
+        if (choice) {
+          // Add as new project — preserves all existing projects untouched
+          if (!p.id) p.id = uid();
+          // Ensure unique name
+          const existingNames = data.projects.map(pr => pr.name);
+          let finalName = pName;
+          let n = 1;
+          while (existingNames.includes(finalName)) { finalName = pName + ' (' + (++n) + ')'; }
+          p.name = finalName;
+          data.projects.push(p);
+          data.activeProjectId = p.id;
+          data.currentKP = null; data.currentQuestion = null;
+          saveData(data);
+          renderBank(); renderStudy(); updateTopBar();
+          toast('"' + finalName + '" 已添加为新项目', 'success');
+          return;
+        }
+        // Merge into current
+        if (!confirm('确认将 ' + kpCount + ' 个知识点合并到当前项目 "' + proj().name + '"？')) return;
+        assignBatches(p.kps || []);
+        proj().kps = proj().kps.concat(p.kps || []);
+        proj().coolingPool = [];
+        saveData(data);
+        renderBank(); renderStudy(); updateTopBar();
+        toast('已合并 ' + kpCount + ' 个知识点到 "' + proj().name + '"', 'success');
+        return;
+      }
+
+      // ── Full backup (multi-project or explicit full_backup type) ──
+      if (imported.projects && (imported.type === 'full_backup' || imported.projects.length > 1)) {
+        if (confirm('检测到 ' + imported.projects.length + ' 个项目的完整备份。\n\n"确定" = 恢复全部项目（覆盖当前数据）\n"取消" = 仅将题目合并到当前项目 "' + proj().name + '"')) {
           data.projects = imported.projects;
           data.activeProjectId = imported.activeProjectId || imported.projects[0].id;
           data.currentKP = null; data.currentQuestion = null;
           saveData(data);
           renderBank(); renderStudy(); updateTopBar();
-          toast(`${imported.projects.length} 个项目已恢复`, 'success');
+          toast(imported.projects.length + ' 个项目已恢复', 'success');
           return;
         }
       }
-      // Merge into current project
+
+      // ── Legacy / fallback: merge KPs into current project ──
       let importKPs;
       if (imported.projects) {
         importKPs = imported.projects.reduce((s, p) => s.concat(p.kps || []), []);
       } else if (imported.kps) {
         importKPs = imported.kps;
+      } else if (imported.project && imported.project.kps) {
+        // Old single-project format without type field
+        importKPs = imported.project.kps;
       } else {
         throw new Error('格式不正确');
       }
-      if (!confirm(`确认将 ${importKPs.length} 个知识点导入到当前项目"${proj().name}"？`)) return;
+      if (importKPs.length === 0) throw new Error('文件中没有知识点');
+      if (!confirm('确认将 ' + importKPs.length + ' 个知识点导入到当前项目 "' + proj().name + '"？')) return;
       assignBatches(importKPs);
       proj().kps = proj().kps.concat(importKPs);
       proj().coolingPool = [];
       saveData(data);
       renderBank(); renderStudy(); updateTopBar();
-      toast(`已导入 ${importKPs.length} 个知识点`, 'success');
+      toast('已导入 ' + importKPs.length + ' 个知识点', 'success');
     } catch (e) {
-      toast('导入失败：文件格式不正确', 'error');
+      toast('导入失败：' + e.message, 'error');
     }
   };
   reader.readAsText(file);
@@ -3052,7 +3293,7 @@ function importData(event) {
 
 function clearAll() {
   const p = proj();
-  if (!confirm(`确定要清空项目"${p.name}"的所有题库数据吗？此操作不可恢复！`)) return;
+  if (!confirm('确定要清空项目"' + p.name + '"的所有题库数据吗？此操作不可恢复！')) return;
   p.kps = [];
   p.coolingPool = [];
   p.lastKilled = null;
@@ -3061,7 +3302,7 @@ function clearAll() {
   p.stats = { today: todayStr, count: 0, correct: 0, attempts: 0 };
   saveData(data);
   renderBank(); renderStudy(); updateTopBar();
-  toast(`项目"${p.name}"的数据已清空`, 'info');
+  toast('项目"' + p.name + '"的数据已清空', 'info');
 }
 
 // ──────────────────────────────────────
